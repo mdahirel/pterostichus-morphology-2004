@@ -89,7 +89,8 @@ data <- summed_counts |>
   left_join(sites)  |> 
   left_join(dates)  |>  
   mutate(SPECIES="Pterostichus madidus",
-         doy=yday(dmy(DATE)),
+         doy_start=yday(dmy(DATE_start)),
+         doy_end=yday(dmy(DATE_end)),
          YEAR=factor(YEAR))  |>  
   filter(SITE!="RB12")  ## that site should be removed because trampled by boars (see Solène paper)
 ```
@@ -139,7 +140,7 @@ mod_dist <- brm(
 pp_check(mod_dist,"stat_2d") ##some slight overdispersion
 ```
 
-
+!!!!!! NEED TO TRIPLE CHECK THE PHI PRIOR AND FORMULATION TO BE SURE IT's RIGHT
 ```{r}
 prior=c(
           set_prior("normal(0,1)",class="b"),
@@ -154,7 +155,7 @@ mod_dist <- brm(
                                       (1|SITE)+ (scaled_dist | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -169,7 +170,7 @@ mod_100 <- brm(
      nlf(phi~1/invphi),
      invphi~1
      ),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -184,7 +185,7 @@ mod_300 <- brm(
                                       (1|SITE)+ (scaled_IMD_300 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -196,7 +197,7 @@ mod_600 <- brm(
                                       (1|SITE)+ (scaled_IMD_600 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -209,7 +210,7 @@ mod_900 <- brm(
                                       (1|SITE)+ (scaled_IMD_900 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -221,7 +222,7 @@ mod_1200 <- brm(
                                       (1|SITE)+ (scaled_IMD_1200 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -233,7 +234,7 @@ mod_1500 <- brm(
                                       (1|SITE)+ (scaled_IMD_1500 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -245,7 +246,7 @@ mod_1800 <- brm(
                                       (1|SITE)+ (scaled_IMD_1800 | CAMP),
      nlf(phi~1/invphi),
      invphi~1),
-        family=beta_binomial,
+        family=beta_binomial(link_phi="identity"),
         data=data,
         backend="cmdstanr",
         seed=42,
@@ -437,6 +438,7 @@ data |>
                   .width=c(0.001,0.95),fill="grey",alpha=0.5)+
   scale_x_continuous("mean Imperviousness Density (100 m radius around site)")+
   scale_y_continuous("proportion of black-legged individuals")+
+  scale_size("Beetles captured")+
   theme_bw()
 
 
@@ -446,7 +448,7 @@ newdata=data |>
   mutate(SITE="RB00") |> 
   distinct()  |>  
   mutate(N_total=1) |> 
-  add_epred_draws(mod_100,re_form=~(scaled_IMD_100|CAMP))
+  add_epred_draws(mod_100,re_formula=~(scaled_IMD_100|CAMP))
 
 data |>  
   ggplot()+
@@ -549,6 +551,39 @@ mod_1800 <- brm(
         backend="cmdstanr",
         seed=42,
         prior=prior
+        )
+```
+
+```{r}
+sampling_effort <-dates |> 
+  mutate(YEAR=factor(YEAR),
+         doy_start=yday(dmy(DATE_start)),
+         doy_end=yday(dmy(DATE_end))) |> 
+           group_by(YEAR) |> 
+  summarise(sampling_effort=max(doy_end)-min(doy_start))
+
+data_pooled2 = data |>  group_by(SITE, YEAR) |> 
+  summarise(N_total=sum(N_total),
+            N_blackleg=sum(N_blackleg)) |> 
+  left_join(sites) |> 
+  left_join(sampling_effort)
+```
+
+no evidence that popsize, measure
+```{r}
+prior=c(
+          set_prior("normal(0,1)",class="b"),   ###need better prior for intercept, or rate
+          set_prior("normal(0,1)",nlpar="invshape",lb=0)
+        )
+
+mod_100 <- brm(
+  bf(N_total|rate(sampling_effort)~0+YEAR+scaled_IMD_100:YEAR,
+     nlf(shape~1/invshape),
+     invshape~1),
+        family=negbinomial(link_shape="identity"),
+        data=data_pooled2,
+        backend="cmdstanr",prior=prior,
+        seed=42
         )
 ```
 
