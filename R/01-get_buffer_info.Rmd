@@ -20,10 +20,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r packages}
 library(tidyverse)
 library(sf)
-library(lubridate)
-library(brms)
-library(cmdstanr)
-library(tidybayes)
+library(terra)
+library(units)
 
 library(here)
 
@@ -32,140 +30,57 @@ options(mc.cores = 4)
 
 # Introduction
 
-<!--SOME CONTEXT TO ADD -->
-As far as I can tell, nobody really used *Pterostichus madidus* polymorphism as an evolutionary ecology model in cities (not a lot of people used it as an evolutionary model *at all* actually, even outside cities).
-There's a few urban data in that 2002 thesis, but a bit messy; there is also an actual *P. madidus* urban evolutionary study (carabids more generally actually; the refs are in the urban evolution book), but it was based on genetic diversity, not phenotypic polymorphism, so we're safe.
-
 # Data loading and preparation
 
 First we load all the data (note that *P. madidus* data come in two separate files, one for the red-legged morph, one for the black-legged).
 
 ```{r data}
-raw_counts <-read_csv(here("data","pterostichus_madidus_2004_2005.csv"))
-raw_sites <-read_sf(here("data","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
-ucdb_centroid <- read_sf(here("data","rennes_ucdb_2015_centroid.gpkg"),layer="rennes_ucdb_2015_centroid")
-ucdb_extent <- read_sf(here("data","rennes_ucdb_2015_extent.gpkg"),layer="rennes_ucdb_2015_extent")
-dates <- read_csv(here("data","sampling_dates_2004_2005.csv"))
+raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
+
+IMD <- rast(here("data","GIS_layers","IMD_2006_020m_eu_03035_d03_E30N20.tif"))
+names(IMD)<-"IMD"
+
+NAflag(IMD) <- 255 # IMPORTANT: GHSL spec: 255 = nodata
 ```
 
-<!--describe data content-->
 
-Now we reshape the data so they are in the long format, we remove the `RB12` site which was more or less abandoned because boars (see Solène's paper), and we add and reorder some variables so that things are easier down the line
+make buffers
 
 ```{r}
-summed_counts <- raw_counts |> 
-  rowwise() |> 
-  mutate(N = sum(c_across(P1:P12))) |> 
-  ungroup() |> 
-  select(CODE,CAMP,SITE,N) |> 
-  pivot_wider(names_from=CODE,values_from = N) |> 
-  rename(N_blackleg="PTEMN",N_redleg="PTEMR") |> 
-  mutate(N_total=N_blackleg+N_redleg)
+buffer_widths <- c(100,300,600,900,1200,1500,1800)
+
+for (i in 1:length(buffer_widths)){
+  
+buffers <-st_buffer(raw_sites,dist=set_units(buffer_widths[i],"m"))
+
+write_sf(buffers,
+         here("data","GIS_layers",paste0("rennes2004_buffers_",buffer_widths[i],"m.gpkg")),
+         layer=paste0("rennes2004_buffers_",buffer_widths[i],"m")
+)
+}
+
 ```
 
-
-```{r}
-sites <- raw_sites |> 
-  rename(SITE="site") |> 
-  mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1]))
-```
-
-```{r}
-data <- summed_counts |> 
-  filter(N_total>0) %>% #we remove all dates where no madidus at all were found
-  left_join(sites) %>% 
-  left_join(dates)  |>  
-  mutate(SPECIES="Pterostichus madidus",
-         doy=yday(dmy(DATE)),
-         YEAR=factor(YEAR))  |>  
-  filter(SITE!="RB12") |>   ## that site should be removed because trampled by boars (see Solène paper)
-  mutate(scaled_dist = scale(dist_urban_centroid_m)[,1]) ##scaled to facilitate model fitting
-```
-
-We note a few numbers useful for the Material and Methods:
-```{r}
-sum(summed_counts$N_total) # total beetles in the source datasets (so including RB12)
-
-sum(data$N_total) # total beetles in the final dataset (so excluding RB12)
-```
-
-We can do a rough visualisation
-```{r}
-data  |>  
-  ggplot()+
-  geom_point(aes(dist_urban_centroid_m,N_blackleg/N_total,
-                 size=N_total,col=YEAR))
-```
-
-mm, looks like there is clearly an effect of urbanisation
-# Models
 
 
 ```{r}
-mod <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_dist+
-                                      (1|SITE)),
-        family=binomial,
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd")
-        )
-        )
+urban_info <- tibble(SITE=raw_sites$site)
 
-pp_check(mod,"stat_2d") ##some slight overdispersion
+for (i in 1:length(buffer_widths)){
 
-mod <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_dist+
-                                      (1|SITE)),
-        family=beta_binomial,
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd")  ## to do: add prior for phi
-        )
-        )
+buffers<-read_sf(here("data","GIS_layers",paste0("rennes2004_buffers_",buffer_widths[i],"m.gpkg")),
+         layer=paste0("rennes2004_buffers_",buffer_widths[i],"m"))
+reproj_vector=project(vect(buffers),IMD)
 
-pp_check(mod,"stat_2d") ##overdispersion accounted for
+urban_info[,paste0("meanIMD_",buffer_widths[i],"m")] <-  terra::extract(x=IMD,
+  y=reproj_vector,fun="mean",na.rm=TRUE  )$IMD
+}
+
+write_csv(urban_info,
+          here("data","processed_data","urban_info_IMD.csv"))
+
 ```
 
 
-```{r}
-summary(mod)
-```
 
-# Figures
-
-```{r}
-
-newdata=data |> 
-  select(dist_urban_centroid_m,scaled_dist)  |>  
-  distinct()  |>  
-  mutate(N_total=1) |> 
-  add_epred_draws(mod,re_formula=NA)
-
-data |>  
-  ggplot()+
-  geom_point(aes(dist_urban_centroid_m,N_blackleg/N_total,
-                 size=N_total,col=YEAR))+
-  stat_lineribbon(data=newdata,aes(x=dist_urban_centroid_m,y=.epred),
-                  .width=c(0.001,0.95),fill="grey",alpha=0.5)+
-  scale_x_continuous("distance to urban centroid (m)")+
-  scale_y_continuous("proportion of black-legged individuals")+
-  theme_bw()
-```
-
-as a supplementary figure, to bolster the case that no evidence of within year seasonal variation, so doy and year not included in study (between campaign within site var is assumed to be random)
-
-```{r}
-ggplot(data)+
-    geom_point(aes(doy,N_blackleg/N_total,
-                   size=N_total,col=YEAR))+facet_wrap(~SITE)
-```
 

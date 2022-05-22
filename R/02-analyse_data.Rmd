@@ -44,6 +44,7 @@ First we load all the data (note that *P. madidus* data come in two separate fil
 raw_counts <-read_csv(here("data","raw_data","pterostichus_madidus_2004_2005.csv"))
 dates <- read_csv(here("data","raw_data","sampling_dates_2004_2005.csv"))
 
+urban_info <- read_csv(here("data","processed_data","urban_info_IMD.csv"))
 
 
 raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
@@ -70,19 +71,27 @@ summed_counts <- raw_counts |>
 ```{r}
 sites <- raw_sites |> 
   rename(SITE="site") |> 
-  mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1]))
+  mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1])) |> 
+  left_join(urban_info) |> 
+  mutate(scaled_dist = scale(dist_urban_centroid_m)[,1], ##scaled to facilitate model fitting
+         scaled_IMD_100 = scale(meanIMD_100m)[,1],
+         scaled_IMD_300 = scale(meanIMD_300m)[,1],
+         scaled_IMD_600 = scale(meanIMD_600m)[,1],
+         scaled_IMD_900 = scale(meanIMD_900m)[,1],
+         scaled_IMD_1200 = scale(meanIMD_1200m)[,1],
+         scaled_IMD_1500 = scale(meanIMD_1500m)[,1],
+         scaled_IMD_1800 = scale(meanIMD_1800m)[,1])
 ```
 
 ```{r}
 data <- summed_counts |> 
-  filter(N_total>0) %>% #we remove all dates where no madidus at all were found
-  left_join(sites) %>% 
+  filter(N_total>0)  |>  #we remove all dates where no madidus at all were found
+  left_join(sites)  |> 
   left_join(dates)  |>  
   mutate(SPECIES="Pterostichus madidus",
          doy=yday(dmy(DATE)),
          YEAR=factor(YEAR))  |>  
-  filter(SITE!="RB12") |>   ## that site should be removed because trampled by boars (see Solène paper)
-  mutate(scaled_dist = scale(dist_urban_centroid_m)[,1]) ##scaled to facilitate model fitting
+  filter(SITE!="RB12")  ## that site should be removed because trampled by boars (see Solène paper)
 ```
 
 We note a few numbers useful for the Material and Methods:
@@ -98,59 +107,294 @@ data  |>
   ggplot()+
   geom_point(aes(dist_urban_centroid_m,N_blackleg/N_total,
                  size=N_total,col=YEAR))
+
+
+data  |>  
+  ggplot()+
+  geom_point(aes(meanIMD_1800m,N_blackleg/N_total,
+                 size=N_total,col=YEAR))
 ```
 
 mm, looks like there is clearly an effect of urbanisation
 # Models
 
+```{r}
+prior=c(
+          set_prior("normal(0,1)",class="b"),
+          set_prior("normal(0,1.5)",class="Intercept"),
+          set_prior("normal(0,1)",class="sd")
+        )
+```
 
 ```{r}
-mod <- brm(
+mod_dist <- brm(
   bf(N_blackleg|trials(N_total)~scaled_dist+
                                       (1|SITE)),
         family=binomial,
         data=data,
         backend="cmdstanr",
-        seed=42,
-        prior=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd")
-        )
+        seed=42,prior=prior
         )
 
-pp_check(mod,"stat_2d") ##some slight overdispersion
+pp_check(mod_dist,"stat_2d") ##some slight overdispersion
 
-mod <- brm(
+mod_dist <- brm(
   bf(N_blackleg|trials(N_total)~scaled_dist+
                                       (1|SITE)),
         family=beta_binomial,
         data=data,
         backend="cmdstanr",
         seed=42,
-        prior=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd")  ## to do: add prior for phi
-        )
+        prior=prior
         )
 
-pp_check(mod,"stat_2d") ##overdispersion accounted for
+pp_check(mod_dist,"stat_2d") ##overdispersion accounted for
+
+mod_100 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_100+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior,
+  control=list(adapt_delta=0.9)
+        )
+### to explore
+performance::variance_decomposition(mod_dist)
+performance::r2_nakagawa(mod_100)
+
+
+
+mod_300 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_300+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_600 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_600+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+
+mod_900 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_900+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1200 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1200+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1500 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1500+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1800 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1800+
+                                      (1|SITE)),
+        family=beta_binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+```
+
+
+```{r}
+varcomps_dist <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_dist, re_formula = NA)),
+  VI = VarCorr(mod_dist, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "dist",
+    dist=2200,
+    type="dist",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_dist$V_explained)
+
+varcomps_100 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_100, re_formula = NA)),
+  VI = VarCorr(mod_100, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "100",
+    dist=100,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_100$V_explained)
+
+varcomps_300 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_300, re_formula = NA)),
+  VI = VarCorr(mod_300, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "300",
+    dist=300,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_300$V_explained)
+
+varcomps_600 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_600, re_formula = NA)),
+  VI = VarCorr(mod_600, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "600",
+    dist=600,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_600$V_explained)
+
+varcomps_900 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_900, re_formula = NA)),
+  VI = VarCorr(mod_900, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "900",
+    dist=900,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_900$V_explained)
+
+varcomps_1200 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_1200, re_formula = NA)),
+  VI = VarCorr(mod_1200, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "1200",
+    dist=1200,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_1200$V_explained)
+
+varcomps_1500 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_1500, re_formula = NA)),
+  VI = VarCorr(mod_1500, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "1500",
+    dist=1500,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_1500$V_explained)
+
+varcomps_1800 <- tibble(
+  VF = matrixStats::rowVars(posterior_linpred(mod_1500, re_formula = NA)),
+  VI = VarCorr(mod_1800, summary = FALSE)$SITE$sd[, "Intercept"]^2
+) %>%
+  mutate(
+    model = "1800",
+    dist=1800,
+    type="IMD",
+    V_SITE = VF + VI
+  )%>%
+  mutate(V_explained = VF/V_SITE)
+
+mean_hdi(varcomps_1800$V_explained)
+
+rbind(varcomps_dist,
+      varcomps_100,
+      varcomps_300,
+      varcomps_600,
+      varcomps_900,
+      varcomps_1200,
+      varcomps_1500,
+      varcomps_1800) |> 
+  ggplot()+
+  stat_eye(aes(dist,V_explained*100),.width=c(0.001,0.95)) +
+  geom_vline(xintercept=2000,lty=2)+
+  scale_x_continuous("urbanisation metric",breaks=c(100,300,600,900,1200,1500,1800,2200),
+                     labels=c("IMD \n 100m","IMD \n 300m","IMD \n 600m",
+                              "IMD \n 900m","IMD \n 1200m","IMD \n 1500m","IMD \n 1800m","distance to centre"))+
+  scale_y_continuous("% of (logit scale) among-site variance explained")+
+  theme_bw()
 ```
 
 
 ```{r}
 summary(mod)
+
+tibble(
+  `distance to centre`=-as_draws_df(mod_dist)$b_scaled_dist, #inverted because values go in opposite direction
+  `IMD (100m)`=as_draws_df(mod_100)$b_scaled_IMD_100,
+  `IMD (300m)`=as_draws_df(mod_300)$b_scaled_IMD_300,
+  `IMD (600m)`=as_draws_df(mod_600)$b_scaled_IMD_600,
+  `IMD (900m)`=as_draws_df(mod_900)$b_scaled_IMD_900,
+  `IMD (1200m)`=as_draws_df(mod_1200)$b_scaled_IMD_1200,
+  `IMD (1500m)`=as_draws_df(mod_1500)$b_scaled_IMD_1500,
+  `IMD (1800m)`=as_draws_df(mod_1800)$b_scaled_IMD_1800
+) |> 
+  pivot_longer(cols=everything(),values_to="effect",names_to="model") |> 
+  ggplot()+
+  stat_eye(aes(model,effect))+
+  geom_hline(yintercept = 0,lty=2)+
+  scale_x_discrete("urbanisation model")+
+  scale_y_continuous("effect size of increasing urbanisation")
+
 ```
 
 # Figures
+
+```{r}
+data_pooled = data |>  group_by(SITE) |> summarise(N_total=sum(N_total),N_blackleg=sum(N_blackleg)) |> left_join(sites)
+```
 
 ```{r}
 newdata=data |> 
   select(dist_urban_centroid_m,scaled_dist)  |>  
   distinct()  |>  
   mutate(N_total=1) |> 
-  add_epred_draws(mod,re_formula=NA)
+  add_epred_draws(mod_dist,re_formula=NA)
 
 data |>  
   ggplot()+
@@ -161,6 +405,25 @@ data |>
   scale_x_continuous("distance to urban centroid (m)")+
   scale_y_continuous("proportion of black-legged individuals")+
   theme_bw()
+
+
+newdata=data |> 
+  select(meanIMD_100m,scaled_IMD_100)  |>  
+  distinct()  |>  
+  mutate(N_total=1) |> 
+  add_epred_draws(mod_100,re_formula=NA)
+
+data |>  
+  ggplot()+
+  geom_point(aes(meanIMD_100m,N_blackleg/N_total,
+                 size=N_total),col="grey")+
+  geom_point(data=data_pooled,aes(meanIMD_100m,N_blackleg/N_total,
+                 size=N_total))+
+  stat_lineribbon(data=newdata,aes(x=meanIMD_100m,y=.epred),
+                  .width=c(0.001,0.95),fill="grey",alpha=0.5)+
+  scale_x_continuous("mean Imperviousness Density (100 m radius around site)")+
+  scale_y_continuous("proportion of black-legged individuals")+
+  theme_bw()
 ```
 
 as a supplementary figure, to bolster the case that no evidence of within year seasonal variation, so doy and year not included in study (between campaign within site var is assumed to be random)
@@ -169,5 +432,90 @@ as a supplementary figure, to bolster the case that no evidence of within year s
 ggplot(data)+
     geom_point(aes(doy,N_blackleg/N_total,
                    size=N_total,col=YEAR))+facet_wrap(~SITE)
+```
+
+
+as a check models on pooled data, ignoring within site variability leads to similar outcomes
+```{r}
+prior=c(
+          set_prior("normal(0,1)",class="b"),
+          set_prior("normal(0,1.5)",class="Intercept")
+        )
+
+mod_dist <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_dist),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+pp_check(mod_dist,"stat_2d")
+
+mod_100 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_100),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior,
+  control=list(adapt_delta=0.9)
+        )
+
+mod_300 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_300),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_600 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_600),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+
+mod_900 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_900),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1200 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1200),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1500 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1500),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
+
+mod_1800 <- brm(
+  bf(N_blackleg|trials(N_total)~scaled_IMD_1800),
+        family=binomial,
+        data=data_pooled,
+        backend="cmdstanr",
+        seed=42,
+        prior=prior
+        )
 ```
 
