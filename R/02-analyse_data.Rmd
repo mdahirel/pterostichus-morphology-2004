@@ -119,8 +119,12 @@ data  |>
 mm, looks like there is clearly an effect of urbanisation
 # Models
 
+Our model assumes an effect of urbanisation (fixed effects), as well as other site-level variation or the possibility that the average frequency of morphs and the effect of urbanisation may change through time (due to seasonality) through random effects.
+
+priors are relatively standard, especially since we scale our urbanisation variables
+
 ```{r}
-prior=c(
+priorB=c(
           set_prior("normal(0,1)",class="b"),
           set_prior("normal(0,1.5)",class="Intercept"),
           set_prior("normal(0,1)",class="sd")
@@ -128,29 +132,64 @@ prior=c(
 ```
 
 ```{r}
-mod_dist <- brm(
+if (file.exists(here("R_output", "model_distanceB.RDS")))
+# this if-else statement is avoid re-fitting a model when knitting Rmd file if there is already one existing in R_output
+# to override, re-run the model and re-save manually by selecting relevant code lines then knit (or delete the RDS object)
+  {
+    mod_distB <- readRDS(here("R_output", "model_distanceB.RDS"))
+  } else {
+    
+mod_distB <- brm(
   bf(N_blackleg|trials(N_total)~scaled_dist+
                                       (1|SITE)+ (scaled_dist | CAMP)),
         family=binomial,
         data=data,
         backend="cmdstanr",
-        seed=42,prior=prior
+        seed=42,prior=priorB
         )
 
-pp_check(mod_dist,"stat_2d") ##some slight overdispersion
+  saveRDS(mod_distB, file = here("R_output", "model_distanceB.RDS"))
+  }
 ```
 
-!!!!!! NEED TO TRIPLE CHECK THE PHI PRIOR AND FORMULATION TO BE SURE IT's RIGHT
+
 ```{r}
-prior=c(
+pp_check(mod_distB,"stat_2d") ##possibly some slight overdispersion
+
+loo_distB<-loo(mod_distB) # warning about some problematic observations, so we could use
+# loo_distB2<-loo(mod_distB,moment_match = TRUE) to reduce them
+#but does not reduce them fully, so might be best to use K-fold CV for everything since we will need to refit the models a certain amount of time
+
+if (file.exists(here("R_output", "KfoldCV_distB.RDS"))){
+  KCV_distB <- readRDS(here("R_output","KfoldCV_distB.RDS"))
+  }else{
+    set.seed(42)
+    KCV_distB<-kfold(mod_distB,K=10)
+    saveRDS(KCV_distB,file=here("R_output","KfoldCV_distB.RDS"))
+    }
+```
+
+then we do the same for a beta-binomial model
+
+```{r}
+priorBB=c(
           set_prior("normal(0,1)",class="b"),
           set_prior("normal(0,1.5)",class="Intercept"),
           set_prior("normal(0,1)",class="sd"),
           set_prior("normal(0,1)",nlpar="invphi",lb=0)
         )
+```
 
 
-mod_dist <- brm(
+```{r}
+
+if (file.exists(here("R_output", "model_distanceBetaB.RDS")))
+# this if-else statement is avoid re-fitting a model when knitting Rmd file if there is already one existing in R_output
+# to override, re-run the model and re-save manually by selecting relevant code lines then knit (or delete the RDS object)
+  {
+    mod_distBB <- readRDS(here("R_output", "model_distanceBetaB.RDS"))
+  } else {
+mod_distBB <- brm(
   bf(N_blackleg|trials(N_total)~scaled_dist+
                                       (1|SITE)+ (scaled_dist | CAMP),
      nlf(phi~1/invphi),
@@ -159,14 +198,86 @@ mod_dist <- brm(
         data=data,
         backend="cmdstanr",
         seed=42,
-        prior=prior
+        prior=priorBB
         )
 
-pp_check(mod_dist,"stat_2d") ##overdispersion accounted for
+  saveRDS(mod_distBB, file = here("R_output", "model_distanceBetaB.RDS"))
+  }
+```
 
-mod_100 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_100+
-                                      (1|SITE)+ (scaled_IMD_100 | CAMP),
+```{r}
+pp_check(mod_distBB,"stat_2d")
+
+if (file.exists(here("R_output", "KfoldCV_distBetaB.RDS"))){
+  KCV_distBB <- readRDS(here("R_output","KfoldCV_distBetaB.RDS"))
+  }else{
+    set.seed(42)
+    KCV_distBB<-kfold(mod_distBB,K=10)
+    saveRDS(KCV_distBB,file=here("R_output","KfoldCV_distBetaB.RDS"))
+    }
+```
+
+
+```{r}
+loo_compare(KCV_distB,KCV_distBB)
+```
+
+```{r}
+buffer_widths <- c(100,300,600,900,1200,1500,1800)
+```
+
+we make all the binomial models for the urbanisation variables
+
+```{r}
+for(i in 1: length(buffer_widths)){
+
+if (file.exists(here("R_output", paste0("model_",buffer_widths[i],"B.RDS")))){
+    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"B.RDS")))
+  } else {  
+  
+mu_formula <- as.formula(
+  paste0("N_blackleg | trials(N_total) ~ scaled_IMD_",buffer_widths[i],
+                         " + (1 | SITE) + (scaled_IMD_",buffer_widths[i]," | CAMP)")
+)
+
+
+temp_mod <- brm(
+  bf(mu_formula),
+        family=binomial,
+        data=data,
+        backend="cmdstanr",
+        seed=42,
+        prior=priorB,
+  control=list(adapt_delta=0.9)
+        )
+ 
+saveRDS(temp_mod, file = here("R_output", paste0("model_",buffer_widths[i],"B.RDS")))
+  }
+  
+
+assign(paste0("mod_",buffer_widths[i],"B"), temp_mod)
+
+
+}
+```
+
+then we do the same with all the beta_binomial
+
+```{r}
+for(i in 1: length(buffer_widths)){
+
+if (file.exists(here("R_output", paste0("model_",buffer_widths[i],"BetaB.RDS")))){
+    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"BetaB.RDS")))
+  } else {  
+  
+mu_formula <- as.formula(
+  paste0("N_blackleg | trials(N_total) ~ scaled_IMD_",buffer_widths[i],
+                         " + (1 | SITE) + (scaled_IMD_",buffer_widths[i]," | CAMP)")
+)
+
+
+temp_mod <- brm(
+  bf(mu_formula,
      nlf(phi~1/invphi),
      invphi~1
      ),
@@ -174,97 +285,78 @@ mod_100 <- brm(
         data=data,
         backend="cmdstanr",
         seed=42,
-        prior=prior,
+        prior=priorBB,
   control=list(adapt_delta=0.9)
         )
+ 
+saveRDS(temp_mod, file = here("R_output", paste0("model_",buffer_widths[i],"BetaB.RDS")))
+  }
+  
+
+assign(paste0("mod_",buffer_widths[i],"BB"), temp_mod)
 
 
-
-mod_300 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_300+
-                                      (1|SITE)+ (scaled_IMD_300 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_600 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_600+
-                                      (1|SITE)+ (scaled_IMD_600 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-
-mod_900 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_900+
-                                      (1|SITE)+ (scaled_IMD_900 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1200 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1200+
-                                      (1|SITE)+ (scaled_IMD_1200 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1500 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1500+
-                                      (1|SITE)+ (scaled_IMD_1500 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1800 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1800+
-                                      (1|SITE)+ (scaled_IMD_1800 | CAMP),
-     nlf(phi~1/invphi),
-     invphi~1),
-        family=beta_binomial(link_phi="identity"),
-        data=data,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
+}
 ```
 
+let's do cross val for all these models
+
+```{r}
+for(i in 1: length(buffer_widths)){
+
+if (file.exists(here("R_output", paste0("KfoldCV_",buffer_widths[i],"B.RDS")))){
+    temp_KCV <- readRDS(here("R_output", paste0("KfoldCV_",buffer_widths[i],"B.RDS")))
+  } else {  
+
+    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"B.RDS")))  
+set.seed(42)
+    temp_KCV<-kfold(temp_mod,K=10,
+                    model_names = paste0("mod_",buffer_widths[i],"B"))
+    
+ 
+saveRDS(temp_KCV, file = here("R_output", paste0("KfoldCV_",buffer_widths[i],"B.RDS")))
+  }
+  
+
+assign(paste0("KCV_",buffer_widths[i],"B"), temp_KCV)
+
+
+}
+```
+
+```{r}
+for(i in 1: length(buffer_widths)){
+
+if (file.exists(here("R_output", paste0("KfoldCV_",buffer_widths[i],"BetaB.RDS")))){
+    temp_KCV <- readRDS(here("R_output", paste0("KfoldCV_",buffer_widths[i],"BetaB.RDS")))
+  } else {  
+
+    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"BetaB.RDS")))  
+set.seed(42)
+    temp_KCV<-kfold(temp_mod,K=10,
+                    model_names = paste0("mod_",buffer_widths[i],"BB"))
+    
+ 
+saveRDS(temp_KCV, file = here("R_output", paste0("KfoldCV_",buffer_widths[i],"BetaB.RDS")))
+  }
+  
+
+assign(paste0("KCV_",buffer_widths[i],"BB"), temp_KCV)
+
+
+}
+```
 
 ```{r}
 ### to explore
-performance::variance_decomposition(mod_dist)
-performance::r2_nakagawa(mod_100)
+performance::variance_decomposition(mod_100BB)
+performance::r2_nakagawa(mod_100BB)
 
 
 
 varcomps_dist <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_dist, re_formula = NA)),
-  VI = VarCorr(mod_dist, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_distBB, re_formula = NA)),
+  VI = VarCorr(mod_distBB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "dist",
@@ -277,8 +369,8 @@ varcomps_dist <- tibble(
 mean_hdi(varcomps_dist$V_explained)
 
 varcomps_100 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_100, re_formula = NA)),
-  VI = VarCorr(mod_100, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_100BB, re_formula = NA)),
+  VI = VarCorr(mod_100BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "100",
@@ -291,8 +383,8 @@ varcomps_100 <- tibble(
 mean_hdi(varcomps_100$V_explained)
 
 varcomps_300 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_300, re_formula = NA)),
-  VI = VarCorr(mod_300, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_300BB, re_formula = NA)),
+  VI = VarCorr(mod_300BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "300",
@@ -305,8 +397,8 @@ varcomps_300 <- tibble(
 mean_hdi(varcomps_300$V_explained)
 
 varcomps_600 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_600, re_formula = NA)),
-  VI = VarCorr(mod_600, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_600BB, re_formula = NA)),
+  VI = VarCorr(mod_600BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "600",
@@ -319,8 +411,8 @@ varcomps_600 <- tibble(
 mean_hdi(varcomps_600$V_explained)
 
 varcomps_900 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_900, re_formula = NA)),
-  VI = VarCorr(mod_900, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_900BB, re_formula = NA)),
+  VI = VarCorr(mod_900BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "900",
@@ -333,8 +425,8 @@ varcomps_900 <- tibble(
 mean_hdi(varcomps_900$V_explained)
 
 varcomps_1200 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_1200, re_formula = NA)),
-  VI = VarCorr(mod_1200, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_1200BB, re_formula = NA)),
+  VI = VarCorr(mod_1200BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "1200",
@@ -347,8 +439,8 @@ varcomps_1200 <- tibble(
 mean_hdi(varcomps_1200$V_explained)
 
 varcomps_1500 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_1500, re_formula = NA)),
-  VI = VarCorr(mod_1500, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_1500BB, re_formula = NA)),
+  VI = VarCorr(mod_1500BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "1500",
@@ -361,8 +453,8 @@ varcomps_1500 <- tibble(
 mean_hdi(varcomps_1500$V_explained)
 
 varcomps_1800 <- tibble(
-  VF = matrixStats::rowVars(posterior_linpred(mod_1500, re_formula = NA)),
-  VI = VarCorr(mod_1800, summary = FALSE)$SITE$sd[, "Intercept"]^2
+  VF = matrixStats::rowVars(posterior_linpred(mod_1800BB, re_formula = NA)),
+  VI = VarCorr(mod_1800BB, summary = FALSE)$SITE$sd[, "Intercept"]^2
 ) %>%
   mutate(
     model = "1800",
@@ -392,19 +484,24 @@ rbind(varcomps_dist,
   theme_bw()
 ```
 
+```{r}
+## looking at seasonal variation of urbanisation effect relative to grand mean
+as_draws_df(mod_100BB) |> select(b_scaled_IMD_100,sd_CAMP__scaled_IMD_100) |> mutate(CV=sd_CAMP__scaled_IMD_100/abs(b_scaled_IMD_100)) |> mean_hdi(CV)
+```
+
+
 
 ```{r}
-summary(mod)
 
 tibble(
-  `distance to centre`=-as_draws_df(mod_dist)$b_scaled_dist, #inverted because values go in opposite direction
-  `IMD (100m)`=as_draws_df(mod_100)$b_scaled_IMD_100,
-  `IMD (300m)`=as_draws_df(mod_300)$b_scaled_IMD_300,
-  `IMD (600m)`=as_draws_df(mod_600)$b_scaled_IMD_600,
-  `IMD (900m)`=as_draws_df(mod_900)$b_scaled_IMD_900,
-  `IMD (1200m)`=as_draws_df(mod_1200)$b_scaled_IMD_1200,
-  `IMD (1500m)`=as_draws_df(mod_1500)$b_scaled_IMD_1500,
-  `IMD (1800m)`=as_draws_df(mod_1800)$b_scaled_IMD_1800
+  `distance to centre`=-as_draws_df(mod_distBB)$b_scaled_dist, #inverted because values go in opposite direction
+  `IMD (100m)`=as_draws_df(mod_100BB)$b_scaled_IMD_100,
+  `IMD (300m)`=as_draws_df(mod_300BB)$b_scaled_IMD_300,
+  `IMD (600m)`=as_draws_df(mod_600BB)$b_scaled_IMD_600,
+  `IMD (900m)`=as_draws_df(mod_900BB)$b_scaled_IMD_900,
+  `IMD (1200m)`=as_draws_df(mod_1200BB)$b_scaled_IMD_1200,
+  `IMD (1500m)`=as_draws_df(mod_1500BB)$b_scaled_IMD_1500,
+  `IMD (1800m)`=as_draws_df(mod_1800BB)$b_scaled_IMD_1800
 ) |> 
   pivot_longer(cols=everything(),values_to="effect",names_to="model") |> 
   ggplot()+
@@ -426,7 +523,7 @@ newdata=data |>
   select(meanIMD_100m,scaled_IMD_100)  |>  
   distinct()  |>  
   mutate(N_total=1) |> 
-  add_epred_draws(mod_100,re_formula=NA)
+  add_epred_draws(mod_100BB,re_formula=NA)
 
 data |>  
   ggplot()+
@@ -436,7 +533,7 @@ data |>
                  size=N_total))+
   stat_lineribbon(data=newdata,aes(x=meanIMD_100m,y=.epred),
                   .width=c(0.001,0.95),fill="grey",alpha=0.5)+
-  scale_x_continuous("mean Imperviousness Density (100 m radius around site)")+
+  scale_x_continuous("mean Imperviousness Density (in 100 m radius around site)")+
   scale_y_continuous("proportion of black-legged individuals")+
   scale_size("Beetles captured")+
   theme_bw()
@@ -467,91 +564,6 @@ as a supplementary figure, to bolster the case that no evidence of within year s
 ggplot(data)+
     geom_point(aes(doy,N_blackleg/N_total,
                    size=N_total,col=YEAR))+facet_wrap(~SITE)
-```
-
-
-as a check models on pooled data, ignoring within site variability leads to similar outcomes
-```{r}
-prior=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1.5)",class="Intercept")
-        )
-
-mod_dist <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_dist),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-pp_check(mod_dist,"stat_2d")
-
-mod_100 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_100),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior,
-  control=list(adapt_delta=0.9)
-        )
-
-mod_300 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_300),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_600 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_600),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-
-mod_900 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_900),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1200 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1200),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1500 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1500),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
-
-mod_1800 <- brm(
-  bf(N_blackleg|trials(N_total)~scaled_IMD_1800),
-        family=binomial,
-        data=data_pooled,
-        backend="cmdstanr",
-        seed=42,
-        prior=prior
-        )
 ```
 
 ```{r}
@@ -585,5 +597,23 @@ mod_100 <- brm(
         backend="cmdstanr",prior=prior,
         seed=42
         )
+```
+
+```{r}
+data$Ndays=data$doy_end-data$doy_start
+
+priorP=c(
+          set_prior("normal(0,1)",class="b"),
+          set_prior("normal(0,1)",class="Intercept"),
+          set_prior("normal(0,1)",class="sd")
+        )
+
+mod=brm(N_total|rate(Ndays)~scaled_IMD_1800+(1|SITE)+(scaled_IMD_1800|CAMP),
+        data=data,family=negbinomial,
+        backend="cmdstanr",
+        seed=42,
+        prior=priorP,
+  control=list(adapt_delta=0.9)
+)
 ```
 

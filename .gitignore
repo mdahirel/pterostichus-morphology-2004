@@ -3,3 +3,4 @@
 .RData
 .Ruserdata
 data/GIS_layers/IMD_2006_020m_eu_03035_d03_E30N20.tif
+*.RDS
