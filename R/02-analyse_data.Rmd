@@ -545,7 +545,7 @@ newdata=data |>
   mutate(SITE="RB00") |> 
   distinct()  |>  
   mutate(N_total=1) |> 
-  add_epred_draws(mod_100,re_formula=~(scaled_IMD_100|CAMP))
+  add_epred_draws(mod_100BB,re_formula=~(scaled_IMD_100|CAMP))
 
 data |>  
   ggplot()+
