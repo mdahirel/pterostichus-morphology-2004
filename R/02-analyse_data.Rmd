@@ -487,6 +487,9 @@ rbind(varcomps_dist,
 ```
 
 ```{r}
+as_draws_df(mod_100BB) |> mean_hdi(b_scaled_IMD_100)
+
+
 ## looking at seasonal variation of urbanisation effect relative to grand mean
 as_draws_df(mod_100BB) |> select(b_scaled_IMD_100,sd_CAMP__scaled_IMD_100) |> mutate(CV=sd_CAMP__scaled_IMD_100/abs(b_scaled_IMD_100)) |> mean_hdi(CV)
 ```
