@@ -38,7 +38,7 @@ There's a few urban data in that 2002 thesis, but a bit messy; there is also an 
 
 # Data loading and preparation
 
-First we load all the data (note that *P. madidus* data come in two separate files, one for the red-legged morph, one for the black-legged).
+First we load all the data:
 
 ```{r data}
 raw_counts <-read_csv(here("data","raw_data","pterostichus_madidus_2004_2005.csv"))
@@ -59,7 +59,7 @@ Now we reshape the data so they are in the long format, we remove the `RB12` sit
 ```{r}
 summed_counts <- raw_counts |> 
   rowwise() |> 
-  mutate(N = sum(c_across(P1:P12))) |> 
+  mutate(N = sum(c_across(P1:P12))) |>  # we sum across all traps for each site * session
   ungroup() |> 
   select(CODE,CAMP,SITE,N) |> 
   pivot_wider(names_from=CODE,values_from = N) |> 
