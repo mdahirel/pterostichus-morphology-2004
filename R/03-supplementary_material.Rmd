@@ -1,0 +1,90 @@
+---
+title: 'Supplementary Material for: "Shifts in colour morph frequencies along an urbanisation gradient in the ground beetle *Pterostichus madidus*"'
+author: "Maxime Dahirel, Hélène Audusseau, Solène Croci"
+date:
+output: pdf_document
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE)
+```
+
+
+```{r packages}
+library(tidyverse)
+library(sf)
+library(lubridate)
+library(brms)
+library(cmdstanr)
+library(tidybayes)
+
+library(here)
+
+options(mc.cores = 4) 
+```
+
+# S1 - Model description
+
+For the present study, our response variable is $n_{i,j}/N_{i,j}$, the proportion of black-legged beetles captured in a given woodland $i$ during a given sampling session $j$, with $N_{i,j}$ the corresponding total number of *P. madidus* beetles. Note that this  naturally only includes woodland $\times$ session combinations with $N_{i,j} > 0$. We ran the below models for each of the 8 possible urbanisation metrics described in the main text.
+
+We initially built binomial models as follows:
+
+$$
+n_{i,j} \sim \mathrm{Binomial}(p_{i,j}, N_{i,j}),
+$$
+$$
+\mathrm{logit}(p_{i,j}) = \beta_{0}  + (\beta_{1} + \eta_{j}) \times x_{i} + \alpha_{i} + \gamma_{j},
+$$
+with $x_{i}$ the (centered and scaled) urbanisation metric at site $i$, $\beta_0$ and $\beta_1$ the fixed-effects intercept and urbanisation slope, respectively, $\alpha_{i}$ the site-specific random intercept, and $\gamma_{j}$ and $\eta_{j}$ the session-specific random intercept and slope. Random effects are distributed as follows: 
+
+$$
+\alpha_{i} \sim \mathrm{Normal}(0, \sigma_{\alpha}),
+$$
+$$
+\begin{bmatrix} \gamma_{j} \\ \eta_{j} \end{bmatrix} 
+\sim 
+\textrm{MVNormal}
+\begin{pmatrix}
+\begin{bmatrix} 0 \\ 0  \end{bmatrix},
+\boldsymbol{\Omega}
+\end{pmatrix},
+$$
+, where $\boldsymbol{\Omega}$ is the covariance matrix for the session-specific random effects, which can be decomposed into its constituent standard deviations and correlation matrix $\boldsymbol{R}$ in this way:
+
+$$
+\boldsymbol{\Omega} = 
+\begin{bmatrix}
+\sigma_{\gamma} & 0 \\
+0 & \sigma_{\eta}
+\end{bmatrix}
+\boldsymbol{R}
+\begin{bmatrix}
+\sigma_{\gamma} & 0 \\
+0 & \sigma_{\eta}
+\end{bmatrix}.
+$$
+We used weakly informative priors inspired by @mcelreathStatisticalRethinkingBayesian2020. We used $\mathrm{Normal}(0,1)$ priors for the fixed effects $\beta$, and $\mathrm{Half-Normal}(0,1)$ priors for all standard deviations $\sigma$. We used a $\mathrm{LKJ}(2)$ prior for the correlation matrix $\boldsymbol{R}$.
+
+
+Evaluations of these models revealed slight but consistent evidence of overdispersion. We therefore fitted the equivalent beta-binomial models to account for that overdispersion:
+
+$$
+n_{i,j} \sim \mathrm{BetaBinomial}(p_{i,j}, N_{i,j}, \phi),
+$$
+where $\phi$ is an added overdispersion parameter with prior $1/\phi \sim \mathrm{HalfNormal}(0,1)$. The remainder of the models is the same as in the binomial case. 
+
+# S2 - Model performance comparisons
+
+
+# S3 - Model effect of urbanisation comparison
+
+
+# S4 - Seasonal variation in urbanisation effect
+
+
+
+# S5 - Population size variability along the urbanisation gradient
+
+# References

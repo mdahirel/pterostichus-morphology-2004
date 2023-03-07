@@ -630,7 +630,7 @@ newdata=dataNB |>
   distinct()  |>  
   add_epred_draws(mod,re_formula=~(scaled_IMD_100|CAMP))
 
-data |>  
+dataNB |>  
   ggplot()+
   geom_point(aes(meanIMD_100m,N_total/Ndays),col="black")+
   stat_lineribbon(data=newdata,aes(x=meanIMD_100m,y=.epred),
