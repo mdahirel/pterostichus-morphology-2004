@@ -16,7 +16,6 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
 ```{r packages}
 library(tidyverse)
 library(sf)
@@ -36,7 +35,7 @@ The aim here is to understand whether urbanisation influences the frequency of b
 
 # Data loading and preparation
 
-First we load all the data:
+## Importing data
 
 ```{r data}
 raw_counts <-read_csv(here("data","raw_data","pterostichus_madidus_2004_2005.csv"))
@@ -47,14 +46,29 @@ urban_info <- read_csv(here("data","processed_data","urban_info_IMD.csv"))
 
 raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
 ucdb_centroid <- read_sf(here("data","GIS_layers","rennes_ucdb_2015_centroid.gpkg"),layer="rennes_ucdb_2015_centroid")
-ucdb_extent <- read_sf(here("data","GIS_layers","rennes_ucdb_2015_extent.gpkg"),layer="rennes_ucdb_2015_extent")
 ```
 
-<!--describe data content-->
+The `raw_counts` table is structured as follows:
 
-Now we reshape the data so they are in the long format, we remove the `RB12` site which was more or less abandoned because boars (see Solène's paper), and we add and reorder some variables so that things are easier down the line
+- a `CODE` column that denotes whether the row is for red-legged (`PTEMR`) or black-legged individuals (`PTEMN`; Noir = Black in French). In the original community ecology dataset, that column also contained species identity information more generally.
 
-```{r}
+- twelve columns `P1` to `P12`, for each of the 12 traps at each site. These are completely interchangeable (P1 at site A has no special link to P1 at site B, compared to e.g. P2 at site B), and anyway we will merge all the traps at one site together quickly enough.
+
+- a `CAMP` column (for "campaign") describing the sampling session
+
+- a `SITE` column with the short ID for each woodland
+
+The `dates` table contains information about the `YEAR` (2004 or 2005), start (`DATE_start`) and end date (`DATE_end`) of each sampling session (`CAMP`).
+
+The `urban_info` table contains info about the mean Imperviousness Density at various scales around each `SITE` (see `01-get_buffer_info.Rmd` for how it is made).
+
+`raw_sites` and `ucdb_centroid` are gpkg files containing the coordinates of each site (woodland centroid) and of the centroid of the Rennes urban area (based on the GHS Urban Centre Database). We will use them to calculate the distance to the urban centroid as an alternative metric of urbanisation.
+
+## Prepping and reshaping data
+
+The first step is merging all the traps for each site * session together, then reshaping data to the "wide" format (one column for red-legged beetles, one for black-legged ones instead of each on its row)
+
+```{r summed_data}
 summed_counts <- raw_counts |> 
   rowwise() |> 
   mutate(N = sum(c_across(P1:P12))) |>  # we sum across all traps for each site * session
@@ -65,8 +79,9 @@ summed_counts <- raw_counts |>
   mutate(N_total=N_blackleg+N_redleg)
 ```
 
+Then on the other side, we prep the urbanisation data: we uniformise column names, we create the "distance to urban centroid" column, and we make scaled versions (mean 0 and SD 1) of each urbanisation metric
 
-```{r}
+```{r prep_urban}
 sites <- raw_sites |> 
   rename(SITE="site") |> 
   mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1])) |> 
@@ -81,53 +96,52 @@ sites <- raw_sites |>
          scaled_IMD_1800 = scale(meanIMD_1800m)[,1])
 ```
 
-```{r}
+Then we can combine the counts, the urban info, the date info together, and do a little bit of final cleaning. We remove one site that was abandoned very early due to boars (so not counted in the 14 sites given in methods) but still has some data recorded (5 beetles). And since we work on morph frequencies, we remove all session * site where no *P. madidus* were caught at all:
+
+```{r data_ready}
 data <- summed_counts |> 
-  filter(N_total>0)  |>  #we remove all dates where no madidus at all were found
   left_join(sites)  |> 
   left_join(dates)  |>  
   mutate(SPECIES="Pterostichus madidus",
          doy_start=yday(dmy(DATE_start)),
          doy_end=yday(dmy(DATE_end)),
          YEAR=factor(YEAR))  |>  
-  filter(SITE!="RB12")  ## that site should be removed because trampled by boars (see Solène paper)
+  filter(SITE!="RB12")|>  ## that site should be removed because trampled by boars (see Solène paper)
+  filter(N_total>0)    #we remove all dates where no madidus at all were found
 ```
 
-We note a few numbers useful for the Material and Methods:
+Before we carry on, we can grab a few numbers useful for the Material and Methods:
 ```{r}
 sum(summed_counts$N_total) # total beetles in the source datasets (so including RB12)
 
 sum(data$N_total) # total beetles in the final dataset (so excluding RB12)
 ```
 
-We can do a rough visualisation
+We can do a rough visualisation to check the results look OK
 ```{r}
 data  |>  
   ggplot()+
   geom_point(aes(dist_urban_centroid_m,N_blackleg/N_total,
                  size=N_total,col=YEAR))
-
-
-data  |>  
-  ggplot()+
-  geom_point(aes(meanIMD_100m,N_blackleg/N_total,
-                 size=N_total,col=YEAR))+facet_wrap(~CAMP)
 ```
 
-mm, looks like there is clearly an effect of urbanisation
-# Models
 
-Our model assumes an effect of urbanisation (fixed effects), as well as other site-level variation or the possibility that the average frequency of morphs and the effect of urbanisation may change through time (due to seasonality) through random effects.
+# Making models
 
-priors are relatively standard, especially since we scale our urbanisation variables
+Our models assume an effect of urbanisation (fixed effect), as well as other site-level variation or the possibility that the average frequency of morphs and the effect of urbanisation itself may change through time (due to seasonality) through random effects.
+
+Since we work with discrete proportions, we're going to start with binomial models. Priors are relatively standard, especially since we scale our urbanisation variables. Don't forget to specify the prior for the correlation matrix between the temporal random intercepts and slopes
 
 ```{r}
 priorB=c(
           set_prior("normal(0,1)",class="b"),
           set_prior("normal(0,1.5)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd")
+          set_prior("normal(0,1)",class="sd"),
+          set_prior("lkj(2)",class="cor")
         )
 ```
+
+We first do the model using distance to urban centroid as an urban metric:
 
 ```{r}
 if (file.exists(here("R_output", "model_distanceB.RDS")))
@@ -150,10 +164,9 @@ mod_distB <- brm(
   }
 ```
 
+We check the model overall performance by cross-validation
 
 ```{r}
-pp_check(mod_distB,"stat_2d") ##possibly some slight overdispersion
-
 loo_distB<-loo(mod_distB) # warning about some problematic observations, so we could use
 # loo_distB2<-loo(mod_distB,moment_match = TRUE) to reduce them
 #but does not reduce them fully, so might be best to use K-fold CV for everything since we will need to refit the models a certain amount of time
@@ -167,13 +180,22 @@ if (file.exists(here("R_output", "KfoldCV_distB.RDS"))){
     }
 ```
 
-then we do the same for a beta-binomial model
+We also check whether a binomial model represents well the data:
+
+```{r}
+pp_check(mod_distB,"stat_2d") 
+```
+
+There is possibly some very very slight overdispersion. 
+
+Might be good to try again with a beta-binomial model:
 
 ```{r}
 priorBB=c(
           set_prior("normal(0,1)",class="b"),
           set_prior("normal(0,1.5)",class="Intercept"),
           set_prior("normal(0,1)",class="sd"),
+          set_prior("lkj(2)",class="cor"),
           set_prior("normal(0,1)",nlpar="invphi",lb=0)
         )
 ```
@@ -204,7 +226,7 @@ mod_distBB <- brm(
 ```
 
 ```{r}
-pp_check(mod_distBB,"stat_2d")
+pp_check(mod_distBB,"stat_2d") # this looks better
 
 if (file.exists(here("R_output", "KfoldCV_distBetaB.RDS"))){
   KCV_distBB <- readRDS(here("R_output","KfoldCV_distBetaB.RDS"))
@@ -215,16 +237,19 @@ if (file.exists(here("R_output", "KfoldCV_distBetaB.RDS"))){
     }
 ```
 
-
+We can then compare the binomial and beta-binomial models:
 ```{r}
 loo_compare(KCV_distB,KCV_distBB)
 ```
 
+Even though the overdispersion was mild, there is still a clear advantage to the beta-binomial model.
+
+
+We can then go ahead and the same the other urbanisation variable (Imperviousness Density) at all the relevant scales. We write things so we don't have to write the code N times, one per scale:
+
 ```{r}
 buffer_widths <- c(100,300,600,900,1200,1500,1800)
 ```
-
-we make all the binomial models for the urbanisation variables
 
 ```{r}
 for(i in 1: length(buffer_widths)){
