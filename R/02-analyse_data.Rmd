@@ -1,6 +1,6 @@
 ---
-title: 'analysis of Pterostichus madidus morphology on 2004-2005 ground beetle data'
-author: ""
+title: '02 - analysing data'
+author: "Maxime Dahirel"
 date:
 output:
   html_document:
