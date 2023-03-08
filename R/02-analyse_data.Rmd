@@ -32,9 +32,7 @@ options(mc.cores = 4)
 
 # Introduction
 
-<!--SOME CONTEXT TO ADD -->
-As far as I can tell, nobody really used *Pterostichus madidus* polymorphism as an evolutionary ecology model in cities (not a lot of people used it as an evolutionary model *at all* actually, even outside cities).
-There's a few urban data in that 2002 thesis, but a bit messy; there is also an actual *P. madidus* urban evolutionary study (carabids more generally actually; the refs are in the urban evolution book), but it was based on genetic diversity, not phenotypic polymorphism, so we're safe.
+The aim here is to understand whether urbanisation influences the frequency of black vs red leg morphs of *Pterostichus madidus*. We re-use data that were collected in the area of Rennes, France in 2004-2005 for a completely different study in community ecology, but still noted the morph for that species. See main text of the article for more details.
 
 # Data loading and preparation
 

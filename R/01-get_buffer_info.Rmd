@@ -25,7 +25,7 @@ library(units)
 
 library(here)
 
-options(mc.cores = 4) 
+options(mc.cores = 4)
 ```
 
 This is where we estimate the average Imperviousness Density (% sealed-up substrate) around all our study sites, to use later in the data analysis
@@ -35,10 +35,11 @@ This is where we estimate the average Imperviousness Density (% sealed-up substr
 First we load all the geopackage data for each site, and the IMD raster layer
 
 ```{r get_data}
-raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
+raw_sites <- read_sf(here("data", "GIS_layers", "rennes2004_sites_centroids.gpkg"),
+                     layer = "rennes2004_sites_centroids")
 
-IMD <- rast(here("data","GIS_layers","IMD_2006_020m_eu_03035_d03_E30N20.tif"))
-names(IMD)<-"IMD"
+IMD <- rast(here("data", "GIS_layers", "IMD_2006_020m_eu_03035_d03_E30N20.tif"))
+names(IMD) <- "IMD"
 
 NAflag(IMD) <- 255 # IMPORTANT: 255 = nodata
 ```
@@ -53,16 +54,17 @@ IMD
 The CRS are different, and in addition sites are in Lon/Lat. This will slightly mess up the building of the buffers, and through that the estimates of the mean IMD. Slightly only since `st_buffer()` is able to reproject on the flow, but it's not perfect. First, a demo of the issue:
 
 ```{r crs_issue2}
-st_buffer(raw_sites,dist=set_units(100,"m")) |> st_area() # variation from site to site, should not happen as all buffers identical in size
+st_buffer(raw_sites, dist = set_units(100, "m")) |> st_area() 
+# variation from site to site, should not happen as all buffers identical in size
 ```
 
 and the solution:
 
 ```{r crs_issue3}
-raw_sites <- raw_sites |> 
-  st_transform(crs=3035) #this is the CRS of the IMD layer, so 2 birds one stone
+raw_sites <- raw_sites |>
+  st_transform(crs = 3035) # this is the CRS of the IMD layer, so 2 birds one stone
 
-st_buffer(raw_sites, dist=set_units(100,"m")) |> st_area() 
+st_buffer(raw_sites, dist = set_units(100, "m")) |> st_area()
 # better, all are identical. Still not exactly = pi * r^2, but that's due to the approx used by st_buffer()
 # set nQuadSegs argument there higher than default and you eventually get the exact areas
 ```
@@ -70,41 +72,40 @@ st_buffer(raw_sites, dist=set_units(100,"m")) |> st_area()
 We then create all the buffers we need, one per spatial scale of interest:
 
 ```{r make_buffers}
-buffer_widths <- c(100,300,600,900,1200,1500,1800)
+buffer_widths <- c(100, 300, 600, 900, 1200, 1500, 1800)
 
-for (i in 1:length(buffer_widths)){
-  
-buffers <-st_buffer(raw_sites,dist=set_units(buffer_widths[i],"m"))
+for (i in 1:length(buffer_widths)) {
+  buffers <- st_buffer(raw_sites, dist = set_units(buffer_widths[i], "m"))
 
-write_sf(buffers,
-         here("data","GIS_layers",paste0("rennes2004_buffers_",buffer_widths[i],"m.gpkg")),
-         layer=paste0("rennes2004_buffers_",buffer_widths[i],"m")
-)
+  write_sf(buffers,
+    here("data", "GIS_layers", 
+         paste0("rennes2004_buffers_", buffer_widths[i], "m.gpkg")),
+    layer = paste0("rennes2004_buffers_", buffer_widths[i], "m")
+  )
 }
-
 ```
 
 We then use these buffers, one scale at a time, to estimate the mean Imperviousness and store that in a table, that we then save
 
 ```{r mean_IMD}
-urban_info <- tibble(SITE=raw_sites$site)
+urban_info <- tibble(SITE = raw_sites$site)
 
-for (i in 1:length(buffer_widths)){
+for (i in 1:length(buffer_widths)) {
+  buffers <- read_sf(here("data", "GIS_layers", 
+                          paste0("rennes2004_buffers_", buffer_widths[i], "m.gpkg")),
+    layer = paste0("rennes2004_buffers_", buffer_widths[i], "m")
+  )
 
-buffers<-read_sf(here("data","GIS_layers",paste0("rennes2004_buffers_",buffer_widths[i],"m.gpkg")),
-         layer=paste0("rennes2004_buffers_",buffer_widths[i],"m"))
+  reproj_vector <- project(vect(buffers), IMD) # should not be needed since they are the same
 
-reproj_vector=project(vect(buffers),IMD) # should not be needed since they are the same
-
-urban_info[,paste0("meanIMD_",buffer_widths[i],"m")] <-  terra::extract(x=IMD,
-  y=reproj_vector,fun="mean",na.rm=TRUE  )$IMD
+  urban_info[, paste0("meanIMD_", buffer_widths[i], "m")] <- terra::extract(
+    x = IMD,
+    y = reproj_vector, fun = "mean", na.rm = TRUE
+  )$IMD
 }
 
-write_csv(urban_info,
-          here("data","processed_data","urban_info_IMD.csv"))
-
+write_csv(
+  urban_info,
+  here("data", "processed_data", "urban_info_IMD.csv")
+)
 ```
-
-
-
-
