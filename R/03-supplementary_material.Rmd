@@ -75,6 +75,59 @@ n_{i,j} \sim \mathrm{BetaBinomial}(p_{i,j}, N_{i,j}, \phi),
 $$
 where $\phi$ is an added overdispersion parameter with prior $1/\phi \sim \mathrm{HalfNormal}(0,1)$. The remainder of the models is the same as in the binomial case. 
 
+```{r data}
+raw_counts <-read_csv(here("data","raw_data","pterostichus_madidus_2004_2005.csv"))
+dates <- read_csv(here("data","raw_data","sampling_dates_2004_2005.csv"))
+
+urban_info <- read_csv(here("data","processed_data","urban_info_IMD.csv"))
+
+
+raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
+ucdb_centroid <- read_sf(here("data","GIS_layers","rennes_ucdb_2015_centroid.gpkg"),layer="rennes_ucdb_2015_centroid")
+```
+
+```{r summed_data}
+summed_counts <- raw_counts |> 
+  rowwise() |> 
+  mutate(N = sum(c_across(P1:P12))) |>  # we sum across all traps for each site * session
+  ungroup() |> 
+  select(CODE,CAMP,SITE,N) |> 
+  pivot_wider(names_from=CODE,values_from = N) |> 
+  rename(N_blackleg="PTEMN",N_redleg="PTEMR") |> 
+  mutate(N_total=N_blackleg+N_redleg)
+```
+
+```{r prep_urban}
+sites <- raw_sites |> 
+  rename(SITE="site") |> 
+  mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1])) |> 
+  left_join(urban_info) |> 
+  mutate(scaled_dist = scale(dist_urban_centroid_m)[,1], ##scaled to facilitate model fitting
+         scaled_IMD_100 = scale(meanIMD_100m)[,1],
+         scaled_IMD_300 = scale(meanIMD_300m)[,1],
+         scaled_IMD_600 = scale(meanIMD_600m)[,1],
+         scaled_IMD_900 = scale(meanIMD_900m)[,1],
+         scaled_IMD_1200 = scale(meanIMD_1200m)[,1],
+         scaled_IMD_1500 = scale(meanIMD_1500m)[,1],
+         scaled_IMD_1800 = scale(meanIMD_1800m)[,1])
+```
+
+```{r data_ready}
+data <- summed_counts |> 
+  left_join(sites)  |> 
+  left_join(dates)  |>  
+  mutate(SPECIES="Pterostichus madidus",
+         doy_start=yday(dmy(DATE_start)),
+         doy_end=yday(dmy(DATE_end)),
+         YEAR=factor(YEAR))  |>  
+  filter(SITE!="RB12")|>  ## that site should be removed because trampled by boars (see Solène paper)
+  filter(N_total>0)    #we remove all dates where no madidus at all were found
+```
+
+```{r}
+buffer_widths <- c(100,300,600,900,1200,1500,1800)
+```
+
 # S2 - Model performance comparisons
 
 We used two metrics to compare our beta-binomial models. We first used $K$-fold cross-validation ($K$ = 10) to evaluate these models based on their overall predictive performance [@vehtariPracticalBayesianModel2017]. We then also compared them based on the proportion of (logit-scale) among-site variance explained by fixed effects $\frac{\sigma_{\beta}^2}{\sigma_{\beta}^2 + \sigma_{\alpha}^2}$, where the variance explained by fixed effects $\sigma_{\beta}^2$ is estimated as in <!--ref-->. This is because since all models include a site random effect, comparing them on their overall performance may not reflect the way urbanisation specifically explains average among-site differences, as the site random effect will "absorb" any among-site variation not explained by the urbanisation metric. 
@@ -95,5 +148,127 @@ The standardised effect of urbanisation $\beta_{1}$ is quite consistent whether 
 
 
 # S5 - Population size variability along the urbanisation gradient
+
+Evolutionary clines may in some cases be caused by non-adaptive forces; this includes genetic drift, in particular if a gradient in population sizes is correlated with the environmental gradient of interest <!--ref-->. For a first check on whether our results may be explainable by drift, we looked at whether there was an effect of urbanisation on population sizes of *P. madidus* in our data.
+
+Our models are here essentially structured the same way as the main proportion models (see main text and **S1**), with a few nuances summed up here:
+
+- the response is now $N_{i,j}$ the total number of *P. madidus* caught by woodland $i$ $\times$ session $j$ combination;
+
+- importantly, samples with 0 beetles found are **included** and not excluded;
+
+- since data are now counts and not proportions, we use a negative binomial model (with a log link) rather than a (beta-)binomial ones;
+
+- we include an offset or rate term to account for the fact sampling sessions are not the same length;
+
+- the prior for the intercept is changed back to the "standard" $\mathrm{Normal}(0,1)$ from $\mathrm{Normal}(0,1.5)$, as the latter is mostly meaningful in the context of proportional data (<!--ref-->). Other priors are left as is.
+
+Keeping the model structure of the main models (with random effects of sessions) allows us to account correctly for the known seasonality of beetle abundances, rather than ignoring it by pooling, which may lead to potential issues.
+
+We find that independently of the metric used, there is no clear evidence that urbanisation has an effect on population sizes (**Fig. S5-1**). We note that if there were to be an effect, the data suggests it would be towards *increased*, not reduced, population sizes in cities.
+
+```{r data_N}
+dataNB <- summed_counts |> 
+  #filter(N_total>0)  |>  #you need to keep the 0s here for correct counts
+  left_join(sites)  |> 
+  left_join(dates)  |>  
+  mutate(SPECIES="Pterostichus madidus",
+         doy_start=yday(dmy(DATE_start)),
+         doy_end=yday(dmy(DATE_end)),
+         YEAR=factor(YEAR))  |>  
+  mutate(Ndays = doy_end-doy_start) |> 
+  filter(SITE!="RB12")  ## that site should be removed because trampled by boars (see Solène paper)
+```
+
+
+```{r prior}
+priorNB=c(
+          set_prior("normal(0,1)",class="b"),
+          set_prior("normal(0,1)",class="Intercept"),
+          set_prior("normal(0,1)",class="sd"),
+          set_prior("lkj(2)",class="cor"),
+          set_prior("normal(0,1)",nlpar="invshape",lb=0)
+        )
+```
+
+
+```{r model_dist_N}
+if (file.exists(here("R_output", "model_distanceN.RDS")))
+  {
+    mod_distN <- readRDS(here("R_output", "model_distanceN.RDS"))
+  } else {
+    
+mod_distN <- brm( bf(N_total|rate(Ndays)~scaled_dist+(1|SITE)+(scaled_IMD_100|CAMP),
+     nlf(shape~1/invshape),
+     invshape~1),
+        family=negbinomial(link_shape="identity"),
+        data=dataNB,
+        backend="cmdstanr",
+        seed=42,
+        prior=priorNB,
+  control=list(adapt_delta=0.9)
+)
+
+  saveRDS(mod_distN, file = here("R_output", "model_distanceN.RDS"))
+  }
+```
+
+```{r models_IMD_N}
+for(i in 1: length(buffer_widths)){
+
+if (file.exists(here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))){
+    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))
+  } else {  
+  
+mu_formula <- as.formula(
+  paste0("N_total|rate(Ndays) ~ scaled_IMD_",buffer_widths[i],
+                         " + (1 | SITE) + (scaled_IMD_",buffer_widths[i]," | CAMP)")
+)
+
+
+temp_mod <- brm(
+  bf(mu_formula,
+     nlf(shape~1/invshape),
+     invshape~1),
+        family=negbinomial(link_shape="identity"),
+        data=dataNB,
+        backend="cmdstanr",
+        seed=42,
+        prior=priorNB,
+  control=list(adapt_delta=0.9)
+        )
+ 
+saveRDS(temp_mod, file = here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))
+  }
+  
+
+assign(paste0("mod_",buffer_widths[i],"N"), temp_mod)
+
+
+}
+```
+
+
+```{r fig_5_1}
+
+tibble(
+  `distance to centre`=-as_draws_df(mod_distN)$b_scaled_dist, #inverted because values go in opposite direction
+  `IMD (100m)`=as_draws_df(mod_100N)$b_scaled_IMD_100,
+  `IMD (300m)`=as_draws_df(mod_300N)$b_scaled_IMD_300,
+  `IMD (600m)`=as_draws_df(mod_600N)$b_scaled_IMD_600,
+  `IMD (900m)`=as_draws_df(mod_900N)$b_scaled_IMD_900,
+  `IMD (1200m)`=as_draws_df(mod_1200N)$b_scaled_IMD_1200,
+  `IMD (1500m)`=as_draws_df(mod_1500N)$b_scaled_IMD_1500,
+  `IMD (1800m)`=as_draws_df(mod_1800N)$b_scaled_IMD_1800
+) |> 
+  pivot_longer(cols=everything(),values_to="effect",names_to="model") |> 
+  ggplot()+
+  stat_eye(aes(model,effect))+
+  geom_hline(yintercept = 0,lty=2)+
+  scale_x_discrete("urbanisation model")+
+  scale_y_continuous("effect size of increasing urbanisation")
+
+```
+
 
 # References
