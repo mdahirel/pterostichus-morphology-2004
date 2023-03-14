@@ -131,7 +131,7 @@ data <- summed_counts |>
   filter(N_total > 0) # we remove all dates where no madidus at all were found
 ```
 
-```{r}
+```{r buffer_widths}
 buffer_widths <- c(100, 300, 600, 900, 1200, 1500, 1800)
 ```
 
@@ -159,14 +159,14 @@ for (i in 1:length(buffer_widths)) {
 
 # S2 - Model performance comparisons
 
-We used two metrics to compare our beta-binomial models. We first used $K$-fold cross-validation ($K$ = 10) to evaluate these models based on their overall predictive performance [@vehtariPracticalBayesianModel2017]. We then also compared them based on the proportion of (logit scale) among-site variance explained by fixed effects $\frac{\sigma_{\beta}^2}{\sigma_{\beta}^2 + \sigma_{\alpha}^2}$, where the variance explained by fixed effects $\sigma_{\beta}^2$ is estimated as in <!--ref-->. This is because since all models include a site random effect, comparing them on their overall performance may not reflect the way urbanisation specifically explains average among-site differences, as the site random effect will "absorb" any among-site variation not explained by the urbanisation metric. 
+We used two metrics to compare our beta-binomial models. We first used $K$-fold cross-validation (with $K = 10$) to evaluate these models based on their overall pointwise predictive accuracy [@vehtariPracticalBayesianModel2017]. We then also compared them based on the proportion of (logit scale) among-site variance explained by fixed effects $\frac{\sigma_{\beta}^2}{\sigma_{\beta}^2 + \sigma_{\alpha}^2}$, where the variance explained by fixed effects $\sigma_{\beta}^2$ is estimated as in @nakagawaGeneralSimpleMethod2013. This is because since all models include a site random effect, comparing them on their overall performance may not reflect the way urbanisation specifically explains average among-site differences, as the site random effect will "absorb" any among-site variation not explained by the urbanisation metric. 
 
-All eight models had very similar overall predictive performance based on cross-validation results (**Table S2-1**). The proportion of among-site variance explained by the effect of urbanisation was highest at the 100 m scale and decreased as buffer size increased, with the lowest value for the fixed effect of distance to the urban centroid (**Fig. S2-1**). However, pairwise comparisons show limited support for differences between models, with credible intervals all overlapping 0 (**Fig. S2-1**). 
+All eight models had very similar overall predictive performance based on cross-validation results (**Table S2-1**). The proportion of among-site variance explained by the effect of urbanisation was highest at the 100 m scale and decreased as buffer size increased, with the lowest value for the fixed effect of distance to the urban centroid (**Fig. S2-1**). However, there is actually limited support for differences between models, with posteriors all largely overlapping (**Fig. S2-1**)<!--add (hidden?) support for pairwise comparisons?-->.  
 
+  
+**Table S2-1.** Expected log pointwise predictive density (elpd) for each of the 8 beta-binomial models, expressed as differences ± SE from the elpd of the "best" model in the set.
 
-**Table S2-1** 
-
-```{r}
+```{r table_s2_1}
 loo_compare(
   KCV_100BB, KCV_300BB, KCV_600BB,
   KCV_900BB, KCV_1200BB, KCV_1500BB,
@@ -191,13 +191,13 @@ loo_compare(
   select(metric, value) |>
   rename(
     `Urbanisation metric` = "metric",
-    `ELPD deviation from "best" model ± SE` = "value"
+    `elpd deviation from "best" model ± SE` = "value"
   ) |>
   knitr::kable()
 ```
 
 
-```{r}
+```{r varcomps}
 varcomps_dist <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_distBB, re_formula = NA)),
   VI = VarCorr(mod_distBB, summary = FALSE)$SITE$sd[, "Intercept"]^2
@@ -309,8 +309,10 @@ varcomps_1800 <- tibble(
   mutate(V_explained = VF / V_SITE)
 
 # mean_hdi(varcomps_1800$V_explained)
+```
 
 
+```{r fig_s2_1, fig.height = 3}
 rbind(
   varcomps_dist,
   varcomps_100,
@@ -322,7 +324,7 @@ rbind(
   varcomps_1800
 ) |>
   ggplot() +
-  stat_eye(aes(dist, V_explained * 100), .width = c(0.001, 0.95)) +
+  stat_eye(aes(dist, V_explained * 100), .width = c(0.001, 0.95), point_interval = "mean_hdi") +
   geom_vline(xintercept = 2000, lty = 2) +
   scale_x_continuous("urbanisation metric",
     breaks = c(100, 300, 600, 900, 1200, 1500, 1800, 2200),
@@ -332,11 +334,11 @@ rbind(
       "distance to centre"
     )
   ) +
-  scale_y_continuous("% of (logit scale) among-site variance explained") +
+  scale_y_continuous("% of among-site variance explained") +
   theme_bw()
 ```
 
-**Figure S2-1**
+**Figure S2-1.** Posterior proportion of (logit-scale) site-level variance in morph frequencies explained by urbanisation, depending on the urbanisation metric used in the model. All models are the beta-binomial implementations; black dots are posterior means, segments the 95% Highest Posterior Density Intervals.
 
 # S3 - Model effect of urbanisation comparison
 
