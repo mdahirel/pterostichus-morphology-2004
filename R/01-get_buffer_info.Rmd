@@ -18,12 +18,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r packages}
-library(tidyverse)
-library(sf)
-library(terra)
-library(units)
+library(tidyverse) # CRAN v1.3.2
+library(sf)        # CRAN v1.0-9
+library(terra)     # CRAN v1.7-3
+library(units)     # CRAN v0.8-1
 
-library(here)
+library(here)      # CRAN v1.0.1
 
 options(mc.cores = 4)
 ```
