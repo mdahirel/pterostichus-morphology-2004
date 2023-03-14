@@ -3,6 +3,7 @@ title: 'Supplementary Material for: "Shifts in colour morph frequencies along an
 author: "Maxime Dahirel, Hélène Audusseau, Solène Croci"
 date:
 output: pdf_document
+bibliography: references.bib
 editor_options:
   chunk_output_type: console
 ---
@@ -11,30 +12,30 @@ editor_options:
 knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 ```
 
-<!--WARNING: the code for this supplementary material relies on objects saved to environment/disk while running the analysis scripts in R/01-get_buffer_info.Rmd and R/ 02-analyse_data.Rmd. If re-running the present code, whether to re-knit the pdf or to re-check the analyses step by step, you need to have already re-run these first. -->
+<!--WARNING: the code for this supplementary material relies on objects saved to environment/disk while running the analysis scripts in R/01-get_buffer_info.Rmd and R/02-analyse_data.Rmd. If re-running the present code, whether to re-knit the pdf or to re-check the analyses step by step, you need to have already re-run these first. -->
 
 ```{r packages}
-library(tidyverse)
-library(lubridate)
-library(sf)
-library(brms)
-library(cmdstanr)
-library(tidybayes)
-library(patchwork)
+library(tidyverse) # CRAN v1.3.2
+library(lubridate) # CRAN v1.9.1
+library(sf)        # CRAN v1.0-9
+library(brms)      # CRAN v2.18.0
+library(cmdstanr)  # [github::stan-dev/cmdstanr] v0.5.2
+library(tidybayes) # CRAN v3.0.3
+library(patchwork) # CRAN v1.1.2
 
-library(here)
+library(here)      # CRAN v1.0.1
 
-options(mc.cores = 4) 
+options(mc.cores = 4)
 ```
 
 # S1 - Model description
 
-For the present study, our response variable is $B_{i,j}/N_{i,j}$, the proportion of black-legged *P. madidus* beetles captured in a given woodland $i$ during a given sampling session $j$, with $B_{i,j}$ the number of black-legged beetles and $N_{i,j}$ the corresponding total number individuals. Note that this naturally only includes woodland $\times$ session combinations with $N_{i,j} > 0$. We ran the below models for each of the 8 possible urbanisation metrics described in the main text.
+For the present study, our response variable is $B_{i,j}/N_{i,j}$, the proportion of black-legged *P. madidus* beetles captured in a given woodland $i$ during a given sampling session $j$, with $B_{i,j}$ the number of black-legged beetles and $N_{i,j}$ the number of individuals of both morphs. Note that we naturally only include woodland $\times$ session combinations with $N_{i,j} > 0$. We ran the models below for each of the 8 possible urbanisation metrics described in the main text.
 
 We initially built binomial models as follows:
 
 $$
-B_{i,j} \sim \mathrm{Binomial}(p_{i,j}, N_{i,j}),
+B_{i,j} \sim \mathrm{Binomial}(N_{i,j}, p_{i,j}),
 $$
 $$
 \mathrm{logit}(p_{i,j}) = \beta_{0}  + (\beta_{1} + \eta_{j}) \times x_{i} + \alpha_{i} + \gamma_{j},
@@ -53,7 +54,7 @@ $$
 \boldsymbol{\Omega}
 \end{pmatrix},
 $$
-, where $\boldsymbol{\Omega}$ is the covariance matrix for the session-specific random effects, which can be decomposed into its constituent standard deviations and correlation matrix $\boldsymbol{R}$ in this way:
+where $\boldsymbol{\Omega}$ is the covariance matrix for the session-specific random effects, which can be decomposed into its constituent standard deviations and correlation matrix $\boldsymbol{R}$ in this way:
 
 $$
 \boldsymbol{\Omega} = 
@@ -70,83 +71,89 @@ $$
 We used weakly informative priors mostly inspired by @mcelreathStatisticalRethinkingBayesian2020. We used $\mathrm{Normal}(0,1.5)$ priors for the fixed effect intercept $\beta_{0}$, which corresponds to the logit of a proportion, and $\mathrm{Normal}(0,1)$ for the fixed effect slope $\beta_{1}$. We used $\mathrm{Half-Normal}(0,1)$ priors for all standard deviations $\sigma$, and a $\mathrm{LKJ}(2)$ prior for the correlation matrix $\boldsymbol{R}$.
 
 
-Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code <!--ref?-->). We therefore fitted the equivalent beta-binomial models to account for that overdispersion <!--ref-->:
+Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code<!--ref?-->). We therefore fitted the equivalent beta-binomial models to account for that overdispersion [@harrisonComparisonObservationlevelRandom2015]:
 
 $$
-B_{i,j} \sim \mathrm{BetaBinomial}(p_{i,j}, N_{i,j}, \phi),
+B_{i,j} \sim \mathrm{BetaBinomial}(N_{i,j}, p_{i,j}, \phi),
 $$
-where $\phi$ is an added overdispersion parameter with prior $1/\phi \sim \mathrm{HalfNormal}(0,1)$. The remainder of the models is the same as in the binomial case. 
+where $\phi$ is an overdispersion parameter with prior $1/\phi \sim \mathrm{Half-Normal}(0,1)$ (based on the similar parameterisation of the negative binomial distribution; seee e.g. https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#story-when-the-generic-prior-fails-the-case-of-the-negative-binomial). The remainder of the models is the same as in the binomial case. 
 
 ```{r data}
-raw_counts <-read_csv(here("data","raw_data","pterostichus_madidus_2004_2005.csv"))
-dates <- read_csv(here("data","raw_data","sampling_dates_2004_2005.csv"))
+raw_counts <- read_csv(here("data", "raw_data", "pterostichus_madidus_2004_2005.csv"))
+dates <- read_csv(here("data", "raw_data", "sampling_dates_2004_2005.csv"))
 
-urban_info <- read_csv(here("data","processed_data","urban_info_IMD.csv"))
+urban_info <- read_csv(here("data", "processed_data", "urban_info_IMD.csv"))
 
 
-raw_sites <-read_sf(here("data","GIS_layers","rennes2004_sites_centroids.gpkg"),layer="rennes2004_sites_centroids")
-ucdb_centroid <- read_sf(here("data","GIS_layers","rennes_ucdb_2015_centroid.gpkg"),layer="rennes_ucdb_2015_centroid")
+raw_sites <- read_sf(here("data", "GIS_layers", "rennes2004_sites_centroids.gpkg"), layer = "rennes2004_sites_centroids")
+ucdb_centroid <- read_sf(here("data", "GIS_layers", "rennes_ucdb_2015_centroid.gpkg"), layer = "rennes_ucdb_2015_centroid")
 ```
 
 ```{r summed_data}
-summed_counts <- raw_counts |> 
-  rowwise() |> 
-  mutate(N = sum(c_across(P1:P12))) |>  # we sum across all traps for each site * session
-  ungroup() |> 
-  select(CODE,CAMP,SITE,N) |> 
-  pivot_wider(names_from=CODE,values_from = N) |> 
-  rename(N_blackleg="PTEMN",N_redleg="PTEMR") |> 
-  mutate(N_total=N_blackleg+N_redleg)
+summed_counts <- raw_counts |>
+  rowwise() |>
+  mutate(N = sum(c_across(P1:P12))) |> # we sum across all traps for each site * session
+  ungroup() |>
+  select(CODE, CAMP, SITE, N) |>
+  pivot_wider(names_from = CODE, values_from = N) |>
+  rename(N_blackleg = "PTEMN", N_redleg = "PTEMR") |>
+  mutate(N_total = N_blackleg + N_redleg)
 ```
 
 ```{r prep_urban}
-sites <- raw_sites |> 
-  rename(SITE="site") |> 
-  mutate(dist_urban_centroid_m=as.numeric(st_distance(raw_sites,ucdb_centroid)[,1])) |> 
-  left_join(urban_info) |> 
-  mutate(scaled_dist = scale(dist_urban_centroid_m)[,1], ##scaled to facilitate model fitting
-         scaled_IMD_100 = scale(meanIMD_100m)[,1],
-         scaled_IMD_300 = scale(meanIMD_300m)[,1],
-         scaled_IMD_600 = scale(meanIMD_600m)[,1],
-         scaled_IMD_900 = scale(meanIMD_900m)[,1],
-         scaled_IMD_1200 = scale(meanIMD_1200m)[,1],
-         scaled_IMD_1500 = scale(meanIMD_1500m)[,1],
-         scaled_IMD_1800 = scale(meanIMD_1800m)[,1])
+sites <- raw_sites |>
+  rename(SITE = "site") |>
+  mutate(dist_urban_centroid_m = as.numeric(st_distance(raw_sites, ucdb_centroid)[, 1])) |>
+  left_join(urban_info) |>
+  mutate(
+    scaled_dist = scale(dist_urban_centroid_m)[, 1], ## scaled to facilitate model fitting
+    scaled_IMD_100 = scale(meanIMD_100m)[, 1],
+    scaled_IMD_300 = scale(meanIMD_300m)[, 1],
+    scaled_IMD_600 = scale(meanIMD_600m)[, 1],
+    scaled_IMD_900 = scale(meanIMD_900m)[, 1],
+    scaled_IMD_1200 = scale(meanIMD_1200m)[, 1],
+    scaled_IMD_1500 = scale(meanIMD_1500m)[, 1],
+    scaled_IMD_1800 = scale(meanIMD_1800m)[, 1]
+  )
 ```
 
 ```{r data_ready}
-data <- summed_counts |> 
-  left_join(sites)  |> 
-  left_join(dates)  |>  
-  mutate(SPECIES="Pterostichus madidus",
-         doy_start=yday(dmy(DATE_start)),
-         doy_end=yday(dmy(DATE_end)),
-         YEAR=factor(YEAR))  |>  
-  filter(SITE!="RB12")|>  ## that site should be removed because trampled by boars (see Solène paper)
-  filter(N_total>0)    #we remove all dates where no madidus at all were found
+data <- summed_counts |>
+  left_join(sites) |>
+  left_join(dates) |>
+  mutate(
+    SPECIES = "Pterostichus madidus",
+    doy_start = yday(dmy(DATE_start)),
+    doy_end = yday(dmy(DATE_end)),
+    YEAR = factor(YEAR)
+  ) |>
+  filter(SITE != "RB12") |> ## that site should be removed because trampled by boars (see Solène paper)
+  filter(N_total > 0) # we remove all dates where no madidus at all were found
 ```
 
 ```{r}
-buffer_widths <- c(100,300,600,900,1200,1500,1800)
+buffer_widths <- c(100, 300, 600, 900, 1200, 1500, 1800)
 ```
 
 ```{r reimport_models}
-
 mod_distBB <- readRDS(here("R_output", paste0("model_distanceBetaB.RDS")))
 
-for(i in 1:length(buffer_widths)){
-assign(paste0("mod_",buffer_widths[i],"BB"),
-       readRDS(here("R_output", paste0("model_",buffer_widths[i],"BetaB.RDS"))))
+for (i in 1:length(buffer_widths)) {
+  assign(
+    paste0("mod_", buffer_widths[i], "BB"),
+    readRDS(here("R_output", paste0("model_", buffer_widths[i], "BetaB.RDS")))
+  )
 }
 ```
 
 ```{r reimport_KCV}
-
 KCV_distBB <- readRDS(here("R_output", paste0("KfoldCV_distanceBetaB.RDS")))
 
-for(i in 1:length(buffer_widths)){
-assign(paste0("KCV_",buffer_widths[i],"BB"),
-       readRDS(here("R_output", paste0("KfoldCV_",buffer_widths[i],"BetaB.RDS"))))
+for (i in 1:length(buffer_widths)) {
+  assign(
+    paste0("KCV_", buffer_widths[i], "BB"),
+    readRDS(here("R_output", paste0("KfoldCV_", buffer_widths[i], "BetaB.RDS")))
+  )
 }
 ```
 
@@ -160,28 +167,32 @@ All eight models had very similar overall predictive performance based on cross-
 **Table S2-1** 
 
 ```{r}
-loo_compare(KCV_100BB,KCV_300BB,KCV_600BB,
-            KCV_900BB,KCV_1200BB,KCV_1500BB,
-            KCV_1800BB,KCV_distBB) |> 
-  as.data.frame() |> 
+loo_compare(
+  KCV_100BB, KCV_300BB, KCV_600BB,
+  KCV_900BB, KCV_1200BB, KCV_1500BB,
+  KCV_1800BB, KCV_distBB
+) |>
+  as.data.frame() |>
   mutate(value = paste(
-    sprintf("%.2f", round(elpd_diff,2)),"±",
-    sprintf("%.2f", round(se_diff,2)))) |> 
-  rownames_to_column(var="model") |> 
+    sprintf("%.2f", round(elpd_diff, 2)), "±",
+    sprintf("%.2f", round(se_diff, 2))
+  )) |>
+  rownames_to_column(var = "model") |>
   mutate(metric = case_when(
-    model=="mod_100BB" ~ "IMD (100m)",
-    model=="mod_300BB" ~ "IMD (300m)",
-    model=="mod_600BB" ~ "IMD (600m)",
-    model=="mod_900BB" ~ "IMD (900m)",
-    model=="mod_1200BB" ~ "IMD (1200m)",
-    model=="mod_1500BB" ~ "IMD (1500m)",
-    model=="mod_1800BB" ~ "IMD (1800m)",
-    model=="mod_distBB" ~ "distance to urban centroid",
-  )
-         ) |> 
-  select(metric, value) |> 
-  rename(`Urbanisation metric` = "metric",
-         `ELPD deviation from "best" model ± SE` = "value") |> 
+    model == "mod_100BB" ~ "IMD (100m)",
+    model == "mod_300BB" ~ "IMD (300m)",
+    model == "mod_600BB" ~ "IMD (600m)",
+    model == "mod_900BB" ~ "IMD (900m)",
+    model == "mod_1200BB" ~ "IMD (1200m)",
+    model == "mod_1500BB" ~ "IMD (1500m)",
+    model == "mod_1800BB" ~ "IMD (1800m)",
+    model == "mod_distBB" ~ "distance to urban centroid",
+  )) |>
+  select(metric, value) |>
+  rename(
+    `Urbanisation metric` = "metric",
+    `ELPD deviation from "best" model ± SE` = "value"
+  ) |>
   knitr::kable()
 ```
 
@@ -193,13 +204,13 @@ varcomps_dist <- tibble(
 ) %>%
   mutate(
     model = "dist",
-    dist=2200,
-    type="dist",
+    dist = 2200,
+    type = "dist",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_dist$V_explained)
+# mean_hdi(varcomps_dist$V_explained)
 
 varcomps_100 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_100BB, re_formula = NA)),
@@ -207,13 +218,13 @@ varcomps_100 <- tibble(
 ) %>%
   mutate(
     model = "100",
-    dist=100,
-    type="IMD",
+    dist = 100,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_100$V_explained)
+# mean_hdi(varcomps_100$V_explained)
 
 varcomps_300 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_300BB, re_formula = NA)),
@@ -221,13 +232,13 @@ varcomps_300 <- tibble(
 ) %>%
   mutate(
     model = "300",
-    dist=300,
-    type="IMD",
+    dist = 300,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_300$V_explained)
+# mean_hdi(varcomps_300$V_explained)
 
 varcomps_600 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_600BB, re_formula = NA)),
@@ -235,13 +246,13 @@ varcomps_600 <- tibble(
 ) %>%
   mutate(
     model = "600",
-    dist=600,
-    type="IMD",
+    dist = 600,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_600$V_explained)
+# mean_hdi(varcomps_600$V_explained)
 
 varcomps_900 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_900BB, re_formula = NA)),
@@ -249,13 +260,13 @@ varcomps_900 <- tibble(
 ) %>%
   mutate(
     model = "900",
-    dist=900,
-    type="IMD",
+    dist = 900,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_900$V_explained)
+# mean_hdi(varcomps_900$V_explained)
 
 varcomps_1200 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_1200BB, re_formula = NA)),
@@ -263,13 +274,13 @@ varcomps_1200 <- tibble(
 ) %>%
   mutate(
     model = "1200",
-    dist=1200,
-    type="IMD",
+    dist = 1200,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_1200$V_explained)
+# mean_hdi(varcomps_1200$V_explained)
 
 varcomps_1500 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_1500BB, re_formula = NA)),
@@ -277,13 +288,13 @@ varcomps_1500 <- tibble(
 ) %>%
   mutate(
     model = "1500",
-    dist=1500,
-    type="IMD",
+    dist = 1500,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_1500$V_explained)
+# mean_hdi(varcomps_1500$V_explained)
 
 varcomps_1800 <- tibble(
   VF = matrixStats::rowVars(posterior_linpred(mod_1800BB, re_formula = NA)),
@@ -291,31 +302,37 @@ varcomps_1800 <- tibble(
 ) %>%
   mutate(
     model = "1800",
-    dist=1800,
-    type="IMD",
+    dist = 1800,
+    type = "IMD",
     V_SITE = VF + VI
-  )%>%
-  mutate(V_explained = VF/V_SITE)
+  ) %>%
+  mutate(V_explained = VF / V_SITE)
 
-#mean_hdi(varcomps_1800$V_explained)
+# mean_hdi(varcomps_1800$V_explained)
 
 
-rbind(varcomps_dist,
-      varcomps_100,
-      varcomps_300,
-      varcomps_600,
-      varcomps_900,
-      varcomps_1200,
-      varcomps_1500,
-      varcomps_1800) |> 
-  ggplot()+
-  stat_eye(aes(dist,V_explained*100),.width=c(0.001,0.95)) +
-  geom_vline(xintercept=2000,lty=2)+
-  scale_x_continuous("urbanisation metric",breaks=c(100,300,600,900,1200,1500,1800,2200),
-                     labels=c("IMD \n 100m","IMD \n 300m","IMD \n 600m",
-                              "IMD \n 900m","IMD \n 1200m","IMD \n 1500m","IMD \n 1800m",
-                              "distance to centre"))+
-  scale_y_continuous("% of (logit scale) among-site variance explained")+
+rbind(
+  varcomps_dist,
+  varcomps_100,
+  varcomps_300,
+  varcomps_600,
+  varcomps_900,
+  varcomps_1200,
+  varcomps_1500,
+  varcomps_1800
+) |>
+  ggplot() +
+  stat_eye(aes(dist, V_explained * 100), .width = c(0.001, 0.95)) +
+  geom_vline(xintercept = 2000, lty = 2) +
+  scale_x_continuous("urbanisation metric",
+    breaks = c(100, 300, 600, 900, 1200, 1500, 1800, 2200),
+    labels = c(
+      "IMD \n 100m", "IMD \n 300m", "IMD \n 600m",
+      "IMD \n 900m", "IMD \n 1200m", "IMD \n 1500m", "IMD \n 1800m",
+      "distance to centre"
+    )
+  ) +
+  scale_y_continuous("% of (logit scale) among-site variance explained") +
   theme_bw()
 ```
 
@@ -326,25 +343,23 @@ rbind(varcomps_dist,
 The standardised effect of urbanisation $\beta_{1}$ is quite consistent whether distance to city centroid or local Imperviousness Density is used as urbanisation metric, and regardless of the spatial scale at which Imperviousness Density is estimated (**Fig. S3-1**).
 
 ```{r}
-
 tibble(
-  `distance to centre`=-as_draws_df(mod_distBB)$b_scaled_dist, #inverted because values go in opposite direction
-  `IMD (100m)`=as_draws_df(mod_100BB)$b_scaled_IMD_100,
-  `IMD (300m)`=as_draws_df(mod_300BB)$b_scaled_IMD_300,
-  `IMD (600m)`=as_draws_df(mod_600BB)$b_scaled_IMD_600,
-  `IMD (900m)`=as_draws_df(mod_900BB)$b_scaled_IMD_900,
-  `IMD (1200m)`=as_draws_df(mod_1200BB)$b_scaled_IMD_1200,
-  `IMD (1500m)`=as_draws_df(mod_1500BB)$b_scaled_IMD_1500,
-  `IMD (1800m)`=as_draws_df(mod_1800BB)$b_scaled_IMD_1800
-) |> 
-  pivot_longer(cols=everything(),values_to="effect",names_to="model") |> 
-  ggplot()+
-  stat_eye(aes(model,effect))+
-  geom_hline(yintercept = 0,lty=2)+
-  scale_x_discrete("urbanisation model")+
-  scale_y_continuous("effect size of increasing urbanisation")+
+  `distance to centre` = -as_draws_df(mod_distBB)$b_scaled_dist, # inverted because values go in opposite direction
+  `IMD (100m)` = as_draws_df(mod_100BB)$b_scaled_IMD_100,
+  `IMD (300m)` = as_draws_df(mod_300BB)$b_scaled_IMD_300,
+  `IMD (600m)` = as_draws_df(mod_600BB)$b_scaled_IMD_600,
+  `IMD (900m)` = as_draws_df(mod_900BB)$b_scaled_IMD_900,
+  `IMD (1200m)` = as_draws_df(mod_1200BB)$b_scaled_IMD_1200,
+  `IMD (1500m)` = as_draws_df(mod_1500BB)$b_scaled_IMD_1500,
+  `IMD (1800m)` = as_draws_df(mod_1800BB)$b_scaled_IMD_1800
+) |>
+  pivot_longer(cols = everything(), values_to = "effect", names_to = "model") |>
+  ggplot() +
+  stat_eye(aes(model, effect)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  scale_x_discrete("urbanisation model") +
+  scale_y_continuous("effect size of increasing urbanisation") +
   theme_bw()
-
 ```
 
 **Figure S3-1.** <!--LEGEND TO COMPLETE--> Note that the sign of the posterior values for distance to city centroid is inversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases).
@@ -357,58 +372,60 @@ As discussed in the main text, between-session variation in the effect of urbani
 This seasonal stability can be seen by looking at the predicted urbanisation effect session by session, whether the random effect values themselves (**Fig. S4-1**) or their consequences in terms of session-specific predicted values (**Fig. S4-2**). In either case, no obvious seasonal pattern can be seen. 
 
 ```{r}
-ranslope <- ranef(mod_100BB,summary = FALSE)$CAMP[,,"scaled_IMD_100"] |> 
+ranslope <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "scaled_IMD_100"] |>
   as.data.frame() |>
-  pivot_longer(everything(),names_to="CAMP",values_to="random") |>
-  left_join(dates) |> 
-  ggplot()+
-  stat_eye(aes(dmy(DATE_end),random),.width=c(0,0.95))+
-  geom_hline(yintercept = 0,lty=2)+
-  scale_x_date("date (end of sampling session)")+
-  scale_y_continuous("slope deviation")+
-  theme_bw()+
-  coord_cartesian(ylim=c(-0.25,0.25))
+  pivot_longer(everything(), names_to = "CAMP", values_to = "random") |>
+  left_join(dates) |>
+  ggplot() +
+  stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  scale_x_date("date (end of sampling session)") +
+  scale_y_continuous("slope deviation") +
+  theme_bw() +
+  coord_cartesian(ylim = c(-0.25, 0.25))
 ```
 
 ```{r}
-ranint <- ranef(mod_100BB,summary = FALSE)$CAMP[,,"Intercept"] |> 
+ranint <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "Intercept"] |>
   as.data.frame() |>
-  pivot_longer(everything(),names_to="CAMP",values_to="random") |>
-  left_join(dates) |> 
-  ggplot()+
-  stat_eye(aes(dmy(DATE_end),random),.width=c(0,0.95))+
-  geom_hline(yintercept = 0,lty=2)+
-  scale_x_date("")+
-  scale_y_continuous("intercept deviation")+
-  theme_bw()+
-  coord_cartesian(ylim=c(-0.8,0.8))
+  pivot_longer(everything(), names_to = "CAMP", values_to = "random") |>
+  left_join(dates) |>
+  ggplot() +
+  stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  scale_x_date("") +
+  scale_y_continuous("intercept deviation") +
+  theme_bw() +
+  coord_cartesian(ylim = c(-0.8, 0.8))
 ```
 
 ```{r}
-ranint/ranslope
+ranint / ranslope
 ```
 
 **Figure S4-1**
 
 ```{r}
+newdata <- data |>
+  select(meanIMD_100m, scaled_IMD_100, CAMP) |>
+  mutate(SITE = "RB00") |>
+  distinct() |>
+  mutate(N_total = 1) |>
+  add_epred_draws(mod_100BB, re_formula = ~ (scaled_IMD_100 | CAMP))
 
-
-newdata=data |> 
-  select(meanIMD_100m,scaled_IMD_100,CAMP)  |>  
-  mutate(SITE="RB00") |> 
-  distinct()  |>  
-  mutate(N_total=1) |> 
-  add_epred_draws(mod_100BB,re_formula=~(scaled_IMD_100|CAMP))
-
-data |>  
-  ggplot()+
-  geom_point(aes(meanIMD_100m,N_blackleg/N_total,
-                 size=N_total),col="grey")+
-  stat_lineribbon(data=newdata,aes(x=meanIMD_100m,y=.epred),
-                  .width=c(0.001,0.95),fill="grey",alpha=0.5)+
-  scale_x_continuous("mean Imperviousness Density (100 m radius around site)")+
-  scale_y_continuous("proportion of black-legged individuals")+
-  theme_bw()+facet_wrap(~CAMP)
+data |>
+  ggplot() +
+  geom_point(aes(meanIMD_100m, N_blackleg / N_total,
+    size = N_total
+  ), col = "grey") +
+  stat_lineribbon(
+    data = newdata, aes(x = meanIMD_100m, y = .epred),
+    .width = c(0.001, 0.95), fill = "grey", alpha = 0.5
+  ) +
+  scale_x_continuous("mean Imperviousness Density (100 m radius around site)") +
+  scale_y_continuous("proportion of black-legged individuals") +
+  theme_bw() +
+  facet_wrap(~CAMP)
 ```
 
 **Figure S4-2**
@@ -434,107 +451,108 @@ Keeping the model structure of the main models (with random effects of sessions)
 We find that independently of the metric used, there is no clear evidence that urbanisation has an effect on population sizes (**Fig. S5-1**). We note that if there were to be an effect, the data suggests it would be towards *increased*, not reduced, population sizes in cities.
 
 ```{r data_N}
-dataNB <- summed_counts |> 
-  #filter(N_total>0)  |>  #you need to keep the 0s here for correct counts
-  left_join(sites)  |> 
-  left_join(dates)  |>  
-  mutate(SPECIES="Pterostichus madidus",
-         doy_start=yday(dmy(DATE_start)),
-         doy_end=yday(dmy(DATE_end)),
-         YEAR=factor(YEAR))  |>  
-  mutate(Ndays = doy_end-doy_start) |> 
-  filter(SITE!="RB12")  ## that site should be removed because trampled by boars (see Solène paper)
+dataNB <- summed_counts |>
+  # filter(N_total>0)  |>  #you need to keep the 0s here for correct counts
+  left_join(sites) |>
+  left_join(dates) |>
+  mutate(
+    SPECIES = "Pterostichus madidus",
+    doy_start = yday(dmy(DATE_start)),
+    doy_end = yday(dmy(DATE_end)),
+    YEAR = factor(YEAR)
+  ) |>
+  mutate(Ndays = doy_end - doy_start) |>
+  filter(SITE != "RB12") ## that site should be removed because trampled by boars (see Solène paper)
 ```
 
 
 ```{r prior}
-priorNB=c(
-          set_prior("normal(0,1)",class="b"),
-          set_prior("normal(0,1)",class="Intercept"),
-          set_prior("normal(0,1)",class="sd"),
-          set_prior("lkj(2)",class="cor"),
-          set_prior("normal(0,1)",nlpar="invshape",lb=0)
-        )
+priorNB <- c(
+  set_prior("normal(0,1)", class = "b"),
+  set_prior("normal(0,1)", class = "Intercept"),
+  set_prior("normal(0,1)", class = "sd"),
+  set_prior("lkj(2)", class = "cor"),
+  set_prior("normal(0,1)", nlpar = "invshape", lb = 0)
+)
 ```
 
 
 ```{r model_dist_N}
-if (file.exists(here("R_output", "model_distanceN.RDS")))
-  {
-    mod_distN <- readRDS(here("R_output", "model_distanceN.RDS"))
-  } else {
-    
-mod_distN <- brm( bf(N_total|rate(Ndays)~scaled_dist+(1|SITE)+(scaled_IMD_100|CAMP),
-     nlf(shape~1/invshape),
-     invshape~1),
-        family=negbinomial(link_shape="identity"),
-        data=dataNB,
-        backend="cmdstanr",
-        seed=42,
-        prior=priorNB,
-  control=list(adapt_delta=0.9)
-)
+if (file.exists(here("R_output", "model_distanceN.RDS"))) {
+  mod_distN <- readRDS(here("R_output", "model_distanceN.RDS"))
+} else {
+  mod_distN <- brm(
+    bf(
+      N_total | rate(Ndays) ~ scaled_dist + (1 | SITE) + (scaled_IMD_100 | CAMP),
+      nlf(shape ~ 1 / invshape),
+      invshape ~ 1
+    ),
+    family = negbinomial(link_shape = "identity"),
+    data = dataNB,
+    backend = "cmdstanr",
+    seed = 42,
+    prior = priorNB,
+    control = list(adapt_delta = 0.9)
+  )
 
   saveRDS(mod_distN, file = here("R_output", "model_distanceN.RDS"))
-  }
+}
 ```
 
 ```{r models_IMD_N}
-for(i in 1: length(buffer_widths)){
+for (i in 1:length(buffer_widths)) {
+  if (file.exists(here("R_output", paste0("model_", buffer_widths[i], "N.RDS")))) {
+    temp_mod <- readRDS(here("R_output", paste0("model_", buffer_widths[i], "N.RDS")))
+  } else {
+    mu_formula <- as.formula(
+      paste0(
+        "N_total|rate(Ndays) ~ scaled_IMD_", buffer_widths[i],
+        " + (1 | SITE) + (scaled_IMD_", buffer_widths[i], " | CAMP)"
+      )
+    )
 
-if (file.exists(here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))){
-    temp_mod <- readRDS(here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))
-  } else {  
-  
-mu_formula <- as.formula(
-  paste0("N_total|rate(Ndays) ~ scaled_IMD_",buffer_widths[i],
-                         " + (1 | SITE) + (scaled_IMD_",buffer_widths[i]," | CAMP)")
-)
 
+    temp_mod <- brm(
+      bf(
+        mu_formula,
+        nlf(shape ~ 1 / invshape),
+        invshape ~ 1
+      ),
+      family = negbinomial(link_shape = "identity"),
+      data = dataNB,
+      backend = "cmdstanr",
+      seed = 42,
+      prior = priorNB,
+      control = list(adapt_delta = 0.9)
+    )
 
-temp_mod <- brm(
-  bf(mu_formula,
-     nlf(shape~1/invshape),
-     invshape~1),
-        family=negbinomial(link_shape="identity"),
-        data=dataNB,
-        backend="cmdstanr",
-        seed=42,
-        prior=priorNB,
-  control=list(adapt_delta=0.9)
-        )
- 
-saveRDS(temp_mod, file = here("R_output", paste0("model_",buffer_widths[i],"N.RDS")))
+    saveRDS(temp_mod, file = here("R_output", paste0("model_", buffer_widths[i], "N.RDS")))
   }
-  
-
-assign(paste0("mod_",buffer_widths[i],"N"), temp_mod)
 
 
+  assign(paste0("mod_", buffer_widths[i], "N"), temp_mod)
 }
 ```
 
 
 ```{r fig_5_1}
-
 tibble(
-  `distance to centre`=-as_draws_df(mod_distN)$b_scaled_dist, #inverted because values go in opposite direction
-  `IMD (100m)`=as_draws_df(mod_100N)$b_scaled_IMD_100,
-  `IMD (300m)`=as_draws_df(mod_300N)$b_scaled_IMD_300,
-  `IMD (600m)`=as_draws_df(mod_600N)$b_scaled_IMD_600,
-  `IMD (900m)`=as_draws_df(mod_900N)$b_scaled_IMD_900,
-  `IMD (1200m)`=as_draws_df(mod_1200N)$b_scaled_IMD_1200,
-  `IMD (1500m)`=as_draws_df(mod_1500N)$b_scaled_IMD_1500,
-  `IMD (1800m)`=as_draws_df(mod_1800N)$b_scaled_IMD_1800
-) |> 
-  pivot_longer(cols=everything(),values_to="effect",names_to="model") |> 
-  ggplot()+
-  stat_eye(aes(model,effect))+
-  geom_hline(yintercept = 0,lty=2)+
-  scale_x_discrete("urbanisation model")+
-  scale_y_continuous("effect size of increasing urbanisation")+
+  `distance to centre` = -as_draws_df(mod_distN)$b_scaled_dist, # inverted because values go in opposite direction
+  `IMD (100m)` = as_draws_df(mod_100N)$b_scaled_IMD_100,
+  `IMD (300m)` = as_draws_df(mod_300N)$b_scaled_IMD_300,
+  `IMD (600m)` = as_draws_df(mod_600N)$b_scaled_IMD_600,
+  `IMD (900m)` = as_draws_df(mod_900N)$b_scaled_IMD_900,
+  `IMD (1200m)` = as_draws_df(mod_1200N)$b_scaled_IMD_1200,
+  `IMD (1500m)` = as_draws_df(mod_1500N)$b_scaled_IMD_1500,
+  `IMD (1800m)` = as_draws_df(mod_1800N)$b_scaled_IMD_1800
+) |>
+  pivot_longer(cols = everything(), values_to = "effect", names_to = "model") |>
+  ggplot() +
+  stat_eye(aes(model, effect)) +
+  geom_hline(yintercept = 0, lty = 2) +
+  scale_x_discrete("urbanisation model") +
+  scale_y_continuous("effect size of increasing urbanisation") +
   theme_bw()
-
 ```
 
 
