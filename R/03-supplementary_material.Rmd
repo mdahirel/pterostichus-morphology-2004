@@ -415,7 +415,7 @@ ranslope <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "scaled_IMD_100"] |>
   ggplot() +
   stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_date("date (end of sampling session)", date_breaks = "2 months", date_labels = "%m/%Y") +
+  scale_x_date("", date_breaks = "2 months", date_labels = "%m/%Y") +
   scale_y_continuous("random effect slope") +
   theme_bw() +
   coord_cartesian(ylim = c(-0.25, 0.25))
@@ -429,7 +429,7 @@ ranint <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "Intercept"] |>
   ggplot() +
   stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_date("", date_breaks = "2 months", date_labels = "%m/%Y") +
+  scale_x_date("date (end of sampling session)", date_breaks = "2 months", date_labels = "%m/%Y") +
   scale_y_continuous("random effect intercept") +
   theme_bw() +
   coord_cartesian(ylim = c(-0.8, 0.8))
