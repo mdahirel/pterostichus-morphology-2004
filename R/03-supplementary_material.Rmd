@@ -4,6 +4,7 @@ author: "Maxime Dahirel, Hélène Audusseau, Solène Croci"
 date:
 output: pdf_document
 bibliography: references.bib
+csl: the-science-of-nature.csl
 editor_options:
   chunk_output_type: console
 ---
@@ -17,13 +18,13 @@ knitr::opts_chunk$set(echo = FALSE, message = FALSE)
 ```{r packages}
 library(tidyverse) # CRAN v1.3.2
 library(lubridate) # CRAN v1.9.1
-library(sf)        # CRAN v1.0-9
-library(brms)      # CRAN v2.18.0
-library(cmdstanr)  # [github::stan-dev/cmdstanr] v0.5.2
+library(sf) # CRAN v1.0-9
+library(brms) # CRAN v2.18.0
+library(cmdstanr) # [github::stan-dev/cmdstanr] v0.5.2
 library(tidybayes) # CRAN v3.0.3
 library(patchwork) # CRAN v1.1.2
 
-library(here)      # CRAN v1.0.1
+library(here) # CRAN v1.0.1
 
 options(mc.cores = 4)
 ```
@@ -352,7 +353,7 @@ rbind(
   theme_bw()
 ```
 
-**Figure S2-1.** Posterior proportion of (logit-scale) site-level variance in morph frequencies explained by urbanisation, depending on the urbanisation metric used in the model. All models are the beta-binomial implementations; black dots are posterior means, segments the 95% Highest Posterior Density Intervals.
+**Figure S2-1.** Posterior proportion of (logit-scale) site-level variance in morph frequencies explained by urbanisation, depending on the urbanisation metric used in the model. All models are the beta-binomial implementations; black dots are posterior means, segments 95% Highest Posterior Density Intervals.
 
 # S3 - Comparing the effect of urbanisation across models
 
@@ -360,11 +361,13 @@ The standardised effect of urbanisation $\beta_{1}$ is quite consistent whether 
 
 ```{r fig_s3_1, fig.height = 3}
 xcoords <- tibble(
-  model = c("distance to centre","IMD (100m)","IMD (300m)",
-            "IMD (600m)","IMD (900m)","IMD (1200m)",
-            "IMD (1500m)","IMD (1800m)"),
+  model = c(
+    "distance to centre", "IMD (100m)", "IMD (300m)",
+    "IMD (600m)", "IMD (900m)", "IMD (1200m)",
+    "IMD (1500m)", "IMD (1800m)"
+  ),
   dist = c(2200, 100, 300, 600, 900, 1200, 1500, 1800),
-) 
+)
 
 
 tibble(
@@ -378,7 +381,7 @@ tibble(
   `IMD (1800m)` = as_draws_df(mod_1800BB)$b_scaled_IMD_1800
 ) |>
   pivot_longer(cols = everything(), values_to = "effect", names_to = "model") |>
-  left_join(xcoords) |> 
+  left_join(xcoords) |>
   ggplot() +
   stat_eye(aes(dist, effect), .width = c(0.0001, 0.95), point_interval = "mean_hdi") +
   geom_vline(xintercept = 2000, lty = 2) +
@@ -395,16 +398,16 @@ tibble(
   theme_bw()
 ```
 
-**Figure S3-1.** Posterior estimates for the standardised fixed effect of urbanisation $\beta_{1}$, depending on the urbanisation metric used in the model. Note that the sign of the posterior values for distance to city centroid has been reversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases).
+**Figure S3-1.** Posterior estimates for the standardised fixed effect of urbanisation $\beta_{1}$ on the proportion of black-legged *P. madidus*, depending on the urbanisation metric used in the model. Note that the sign of the posterior values for distance to city centroid has been reversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases). Black dots are posterior means, segments 95% Highest Posterior Density Intervals.
 
 
 # S4 - Seasonal variation in urbanisation effect
 
 As discussed in the main text, between-session variation in the effect of urbanisation is small. This is a strong hint that our results reflect true morph differences and not simply weather-induced seasonal variation in relative morph activity (and trappability).
 
-This seasonal stability can be seen by looking at the predicted urbanisation effect session by session, whether the random effect values themselves (**Fig. S4-1**) or their consequences in terms of session-specific predicted values (**Fig. S4-2**). In either case, no obvious seasonal pattern can be seen. 
+This seasonal stability can be seen by plotting the random effects to see how the urbanisation effect deviates from the overall mean effect session by session (random slopes, **Fig. S4-1, top**). One can also do the same for the session-specific random intercepts (**Fig. S4-1, bottom**), or by visualising the consequences of both in terms of session-specific predicted values (**Fig. S4-2**). In all cases, no obvious seasonal pattern can be seen. 
 
-```{r}
+```{r ranef_slopes}
 ranslope <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "scaled_IMD_100"] |>
   as.data.frame() |>
   pivot_longer(everything(), names_to = "CAMP", values_to = "random") |>
@@ -412,13 +415,13 @@ ranslope <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "scaled_IMD_100"] |>
   ggplot() +
   stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_date("date (end of sampling session)") +
-  scale_y_continuous("slope deviation") +
+  scale_x_date("date (end of sampling session)", date_breaks = "2 months", date_labels = "%m/%Y") +
+  scale_y_continuous("random effect slope") +
   theme_bw() +
   coord_cartesian(ylim = c(-0.25, 0.25))
 ```
 
-```{r}
+```{r ranef_int}
 ranint <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "Intercept"] |>
   as.data.frame() |>
   pivot_longer(everything(), names_to = "CAMP", values_to = "random") |>
@@ -426,19 +429,21 @@ ranint <- ranef(mod_100BB, summary = FALSE)$CAMP[, , "Intercept"] |>
   ggplot() +
   stat_eye(aes(dmy(DATE_end), random), .width = c(0, 0.95)) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_date("") +
-  scale_y_continuous("intercept deviation") +
+  scale_x_date("", date_breaks = "2 months", date_labels = "%m/%Y") +
+  scale_y_continuous("random effect intercept") +
   theme_bw() +
   coord_cartesian(ylim = c(-0.8, 0.8))
 ```
 
-```{r}
-ranint / ranslope
+```{r fig_s4_1}
+(ranslope / ranint) &
+  theme(plot.margin = unit(c(5.5, 12, 5.5, 5.5), "pt"))
+# slightly change margin to avoid clipping of x-axis labels
 ```
 
-**Figure S4-1**
+**Figure S4-1.** Posteriors for the session-specific random effect slopes (top) and intercepts (bottom), i.e. $\eta_{j}$ and $\gamma_{j}$ in the model description in **S1**, respectively. The model used is the beta-binomial model with Imperviousness Density (100 m) as the urbanisation metric. Black dots are posterior means, segments 95% Highest Posterior Density Intervals.
 
-```{r}
+```{r fig_s4_2}
 newdata <- data |>
   select(meanIMD_100m, scaled_IMD_100, CAMP) |>
   mutate(SITE = "RB00") |>
@@ -450,36 +455,37 @@ data |>
   ggplot() +
   geom_point(aes(meanIMD_100m, N_blackleg / N_total,
     size = N_total
-  ), col = "grey") +
+  ), col = "grey60") +
   stat_lineribbon(
     data = newdata, aes(x = meanIMD_100m, y = .epred),
     .width = c(0.001, 0.95), fill = "grey", alpha = 0.5
   ) +
-  scale_x_continuous("mean Imperviousness Density (100 m radius around site)") +
+  scale_x_continuous("mean Imperviousness Density (in 100 m radius around site)") +
   scale_y_continuous("proportion of black-legged individuals") +
+  scale_size_area("Beetles captured", breaks = c(1, 10, 20, 50, 100, 200)) +
   theme_bw() +
   facet_wrap(~CAMP)
 ```
 
-**Figure S4-2**
+**Figure S4-2.** Proportion of *Pterostichus madidus* beetles with black legs as a function of urbanisation (Imperviousness Density in 100 m radius), displayed session by session. Grey dots: observed proportions, black line and grey bands: mean predicted relationship *at the sampling session level* (i.e. including random effects in the predictions) along with 95% credible bands (using Highest Posterior Density intervals).
 
 # S5 - Population size variability along the urbanisation gradient
 
-Evolutionary clines may in some cases be caused by non-adaptive forces; this includes genetic drift, in particular if a gradient in population sizes is correlated with the environmental gradient of interest <!--ref-->. For a first check on whether our results may be explainable by drift, we looked at whether there was an effect of urbanisation on population sizes of *P. madidus* in our data.
+Evolutionary clines may in some cases be caused by non-adaptive forces; this includes genetic drift, in particular if a gradient in population sizes is correlated with the environmental gradient of interest. For instance in our case, if urbanisation leads to reduced population sizes [@santangeloModernSpandrelsRoles2018]. For a first check on whether our results may be explainable by drift, we looked at whether there was an effect of urbanisation on population sizes of *P. madidus* in our data.
 
 Our models are here essentially structured the same way as the main proportion models (see main text and **S1**), with a few nuances summed up here:
 
 - the response is now $N_{i,j}$ the total number of *P. madidus* caught by woodland $i$ $\times$ session $j$ combination;
 
-- importantly, samples with 0 beetles found are **included** and not excluded;
+- importantly, samples $ij$ with 0 beetles found are **included** here and not excluded;
 
-- since data are now counts and not proportions, we use a negative binomial model (with a log link) rather than a (beta-)binomial ones;
+- since data are now counts and not proportions, we use negative binomial models (with a log link) rather than (beta-)binomial ones;
 
 - we include an offset or rate term to account for the fact sampling sessions are not the same length;
 
-- the prior for the intercept is changed back to the "standard" $\mathrm{Normal}(0,1)$ from $\mathrm{Normal}(0,1.5)$, as the latter is mostly meaningful in the context of proportional data (<!--ref-->). Other priors are left as is.
+- the prior for the intercept $\beta_{0}$ is changed back to the "standard" $\mathrm{Normal}(0,1)$ from $\mathrm{Normal}(0,1.5)$, as the rationale for the latter is based on proportion data [@mcelreathStatisticalRethinkingBayesian2020]. All other priors are left as is.
 
-Keeping the model structure of the main models (with random effects of sessions) allows us to account correctly for the known seasonality of beetle abundances, rather than ignoring it by pooling, which may lead to potential issues.
+Keeping the model structure of the main models (with random effects of sessions) allows us to account correctly for the known seasonality of beetle abundances (visible **Fig. S4-2**), rather than ignoring it by complete pooling, which may lead to potential issues.
 
 We find that independently of the metric used, there is no clear evidence that urbanisation has an effect on population sizes (**Fig. S5-1**). We note that if there were to be an effect, the data suggests it would be towards *increased*, not reduced, population sizes in cities.
 
@@ -568,7 +574,7 @@ for (i in 1:length(buffer_widths)) {
 ```
 
 
-```{r fig_5_1}
+```{r fig_5_1 , fig.height = 3}
 tibble(
   `distance to centre` = -as_draws_df(mod_distN)$b_scaled_dist, # inverted because values go in opposite direction
   `IMD (100m)` = as_draws_df(mod_100N)$b_scaled_IMD_100,
@@ -580,13 +586,23 @@ tibble(
   `IMD (1800m)` = as_draws_df(mod_1800N)$b_scaled_IMD_1800
 ) |>
   pivot_longer(cols = everything(), values_to = "effect", names_to = "model") |>
+  left_join(xcoords) |>
   ggplot() +
-  stat_eye(aes(model, effect)) +
+  stat_eye(aes(dist, effect), .width = c(0.0001, 0.95), point_interval = "mean_hdi") +
+  geom_vline(xintercept = 2000, lty = 2) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_discrete("urbanisation model") +
-  scale_y_continuous("effect size of increasing urbanisation") +
+  scale_x_continuous("urbanisation metric",
+    breaks = c(100, 300, 600, 900, 1200, 1500, 1800, 2200),
+    labels = c(
+      "IMD \n 100m", "IMD \n 300m", "IMD \n 600m",
+      "IMD \n 900m", "IMD \n 1200m", "IMD \n 1500m", "IMD \n 1800m",
+      "distance to centre"
+    )
+  ) +
+  scale_y_continuous("effect of increasing urbanisation") +
   theme_bw()
 ```
 
+**Figure S5-1.**  Posterior estimates for the standardised fixed effect of urbanisation on the number of *P. madidus* caught per day of sampling, depending on the urbanisation metric used in the model. Note that the sign of the posterior values for distance to city centroid has been reversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases). Black dots are posterior means, segments 95% Highest Posterior Density Intervals.
 
 # References
