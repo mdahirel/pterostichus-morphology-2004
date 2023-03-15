@@ -28,7 +28,10 @@ library(here)      # CRAN v1.0.1
 options(mc.cores = 4)
 ```
 
-This is where we estimate the average Imperviousness Density (% sealed-up substrate) around all our study sites, to use later in the data analysis
+This is where we estimate the average Imperviousness Density (% sealed-up substrate) around all our study sites, to use later in the data analysis.
+
+**IMPORTANT**: To be able to run this script, a copy of the relevant tile of the Imperviousness Density 2006 High Resolution layer **must** be present in `data/GIS_layers` and have the name `IMD_2006_020m_eu_03035_d03_E30N20.tif`. You can download a copy from the EU Copernicus website (https://land.copernicus.eu/pan-european/high-resolution-layers/imperviousness/status-maps/2006 [valid link at the time of commit]). Alternatively, a copy has been made available alongside public releases of this repository; download it and move it to the relevant subfolder.
+Note that since the output of the present script has already been saved (`data/processed_data/urban_info_IMD.csv`), whether or not you do this should not affect your ability to run the main scripts.
 
 # Data loading and preparation
 
