@@ -76,7 +76,21 @@ Evaluations of these models revealed slight but consistent evidence of overdispe
 $$
 B_{i,j} \sim \mathrm{BetaBinomial}(N_{i,j}, p_{i,j}, \phi),
 $$
-where $\phi$ is an overdispersion parameter with prior $1/\phi \sim \mathrm{Half-Normal}(0,1)$ (based on the similar parameterisation of the negative binomial distribution; seee e.g. https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#story-when-the-generic-prior-fails-the-case-of-the-negative-binomial). The remainder of the models is the same as in the binomial case. 
+which is equivalent to
+
+$$
+B_{i,j} \sim \mathrm{Binomial}(N_{i,j}, \pi_{i,j}),
+$$
+$$
+\pi_{i,j} \sim \mathrm{Beta}(a_{i,j}, b_{i,j})
+$$
+$$
+a_{i,j} = p_{i,j} \times \phi
+$$
+$$
+b_{i,j} = (1 - p_{i,j}) \times \phi,
+$$
+where $\phi$ is a precision parameter (higher values = lower overdispersion) in the `brms` implementation. We set priors on the inverse of $\phi$ (where higher values = higher overdispersion): $1/\phi \sim \mathrm{Half-Normal}(0,1)$ (based on similar suggestions for negative binomial models; seee e.g. https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#story-when-the-generic-prior-fails-the-case-of-the-negative-binomial). The model formulation for $p_{i,j}$ is then the same as in the binomial case. 
 
 ```{r data}
 raw_counts <- read_csv(here("data", "raw_data", "pterostichus_madidus_2004_2005.csv"))
@@ -159,9 +173,9 @@ for (i in 1:length(buffer_widths)) {
 
 # S2 - Model performance comparisons
 
-We used two metrics to compare our beta-binomial models. We first used $K$-fold cross-validation (with $K = 10$) to evaluate these models based on their overall pointwise predictive accuracy [@vehtariPracticalBayesianModel2017]. We then also compared them based on the proportion of (logit scale) among-site variance explained by fixed effects $\frac{\sigma_{\beta}^2}{\sigma_{\beta}^2 + \sigma_{\alpha}^2}$, where the variance explained by fixed effects $\sigma_{\beta}^2$ is estimated as in @nakagawaGeneralSimpleMethod2013. This is because since all models include a site random effect, comparing them on their overall performance may not reflect the way urbanisation specifically explains average among-site differences, as the site random effect will "absorb" any among-site variation not explained by the urbanisation metric. 
+We used two metrics to compare our models (both binomial and beta-binomial, although we only present beta-binomial models here for simplicity). We first used $K$-fold cross-validation (with $K = 10$) to evaluate these models based on their overall pointwise predictive accuracy [@vehtariPracticalBayesianModel2017]. We then also compared them based on the proportion of (logit scale) among-site variance explained by fixed effects $\frac{\sigma_{\beta}^2}{\sigma_{\beta}^2 + \sigma_{\alpha}^2}$, where the variance explained by fixed effects $\sigma_{\beta}^2$ is estimated as in @nakagawaGeneralSimpleMethod2013. This is because since all models include a site random effect, comparing them on their overall performance may not reflect the way urbanisation specifically explains average among-site differences, as the site random effect will "absorb" any among-site variation not explained by the urbanisation metric. 
 
-All eight models had very similar overall predictive performance based on cross-validation results (**Table S2-1**). The proportion of among-site variance explained by the effect of urbanisation was highest at the 100 m scale and decreased as buffer size increased, with the lowest value for the fixed effect of distance to the urban centroid (**Fig. S2-1**). However, there is actually limited support for differences between models, with posteriors all largely overlapping (**Fig. S2-1**)<!--add (hidden?) support for pairwise comparisons?-->.  
+All eight models had very similar overall predictive performance based on cross-validation results (**Table S2-1**). The proportion of among-site variance explained by the effect of urbanisation was highest at the 100 m scale and decreased as buffer size increased, with the lowest value for the fixed effect of distance to the urban centroid (**Fig. S2-1**). However, there is actually limited support for differences between models, with posteriors for the proportion of site-level variance explained all largely overlapping (**Fig. S2-1**)<!--add (hidden?) support for pairwise comparisons?-->.  
 
   
 **Table S2-1.** Expected log pointwise predictive density (elpd) for each of the 8 beta-binomial models, expressed as differences ± SE from the elpd of the "best" model in the set.
@@ -324,7 +338,7 @@ rbind(
   varcomps_1800
 ) |>
   ggplot() +
-  stat_eye(aes(dist, V_explained * 100), .width = c(0.001, 0.95), point_interval = "mean_hdi") +
+  stat_eye(aes(dist, V_explained * 100), .width = c(0.0001, 0.95), point_interval = "mean_hdi") +
   geom_vline(xintercept = 2000, lty = 2) +
   scale_x_continuous("urbanisation metric",
     breaks = c(100, 300, 600, 900, 1200, 1500, 1800, 2200),
@@ -340,11 +354,19 @@ rbind(
 
 **Figure S2-1.** Posterior proportion of (logit-scale) site-level variance in morph frequencies explained by urbanisation, depending on the urbanisation metric used in the model. All models are the beta-binomial implementations; black dots are posterior means, segments the 95% Highest Posterior Density Intervals.
 
-# S3 - Model effect of urbanisation comparison
+# S3 - Comparing the effect of urbanisation across models
 
 The standardised effect of urbanisation $\beta_{1}$ is quite consistent whether distance to city centroid or local Imperviousness Density is used as urbanisation metric, and regardless of the spatial scale at which Imperviousness Density is estimated (**Fig. S3-1**).
 
-```{r}
+```{r fig_s3_1, fig.height = 3}
+xcoords <- tibble(
+  model = c("distance to centre","IMD (100m)","IMD (300m)",
+            "IMD (600m)","IMD (900m)","IMD (1200m)",
+            "IMD (1500m)","IMD (1800m)"),
+  dist = c(2200, 100, 300, 600, 900, 1200, 1500, 1800),
+) 
+
+
 tibble(
   `distance to centre` = -as_draws_df(mod_distBB)$b_scaled_dist, # inverted because values go in opposite direction
   `IMD (100m)` = as_draws_df(mod_100BB)$b_scaled_IMD_100,
@@ -356,15 +378,24 @@ tibble(
   `IMD (1800m)` = as_draws_df(mod_1800BB)$b_scaled_IMD_1800
 ) |>
   pivot_longer(cols = everything(), values_to = "effect", names_to = "model") |>
+  left_join(xcoords) |> 
   ggplot() +
-  stat_eye(aes(model, effect)) +
+  stat_eye(aes(dist, effect), .width = c(0.0001, 0.95), point_interval = "mean_hdi") +
+  geom_vline(xintercept = 2000, lty = 2) +
   geom_hline(yintercept = 0, lty = 2) +
-  scale_x_discrete("urbanisation model") +
-  scale_y_continuous("effect size of increasing urbanisation") +
+  scale_x_continuous("urbanisation metric",
+    breaks = c(100, 300, 600, 900, 1200, 1500, 1800, 2200),
+    labels = c(
+      "IMD \n 100m", "IMD \n 300m", "IMD \n 600m",
+      "IMD \n 900m", "IMD \n 1200m", "IMD \n 1500m", "IMD \n 1800m",
+      "distance to centre"
+    )
+  ) +
+  scale_y_continuous("effect of increasing urbanisation") +
   theme_bw()
 ```
 
-**Figure S3-1.** <!--LEGEND TO COMPLETE--> Note that the sign of the posterior values for distance to city centroid is inversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases).
+**Figure S3-1.** Posterior estimates for the standardised fixed effect of urbanisation $\beta_{1}$, depending on the urbanisation metric used in the model. Note that the sign of the posterior values for distance to city centroid has been reversed to make the comparison with the other posteriors easier (as distances to city centroid decrease when urbanisation increases).
 
 
 # S4 - Seasonal variation in urbanisation effect
