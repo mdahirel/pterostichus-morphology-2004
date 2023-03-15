@@ -8,7 +8,7 @@ This repository contains all data and code needed to re-do the analyses and figu
 
 (by Maxime Dahirel, Hélène Audusseau, Solène Croci)
 
-(link to bioRxiv preprint: **upcoming**)
+(link to bioRxiv preprint: **upcoming**)(**TO DO: do not forget to add here and release notes explanation and links for the raster for Zenodo users _ release assets are not transferred to Zenodo**)
 
 data in `.csv` format are in the `data` folder, R script in `.Rmd` format (including detailed information about the analysis) in the `R` folder.
 
