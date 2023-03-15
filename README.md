@@ -1,5 +1,7 @@
 # Effect of urbanisation on ground beetle colour morph frequencies
- 
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7737152.svg)](https://doi.org/10.5281/zenodo.7737152)
+
 This repository contains all data and code needed to re-do the analyses and figures in our manuscript
 
 "Shifts in colour morph frequencies along an urbanisation gradient in the ground beetle *Pterostichus madidus*"  
