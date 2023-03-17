@@ -41,7 +41,7 @@ $$
 $$
 \mathrm{logit}(p_{i,j}) = \beta_{0}  + (\beta_{1} + \eta_{j}) \times x_{i} + \alpha_{i} + \gamma_{j},
 $$
-with $x_{i}$ the (centered and scaled) urbanisation metric at site $i$, $\beta_0$ and $\beta_1$ the fixed effects (intercept and urbanisation slope respectively), $\alpha_{i}$ the site-specific random-effect intercepts, and $\gamma_{j}$ and $\eta_{j}$ the session-specific random intercept and slope. Random effects are distributed as follows: 
+with $x_{i}$ the (centered and scaled) urbanisation metric at site $i$, $\beta_0$ and $\beta_1$ the fixed effects (intercept and urbanisation slope respectively), $\alpha_{i}$ the site-specific random-effect intercept, and $\gamma_{j}$ and $\eta_{j}$ the session-specific random intercept and slope. Random effects are distributed as follows: 
 
 $$
 \alpha_{i} \sim \mathrm{Normal}(0, \sigma_{\alpha}),
@@ -55,7 +55,7 @@ $$
 \boldsymbol{\Omega}
 \end{pmatrix},
 $$
-where $\boldsymbol{\Omega}$ is the covariance matrix for the session-specific random effects, which can be decomposed into its constituent standard deviations and correlation matrix $\boldsymbol{R}$ in this way:
+where $\boldsymbol{\Omega}$ is the covariance matrix for the session-specific random effects, which can be decomposed into its constituent standard deviations and correlation matrix $\boldsymbol{R}$:
 
 $$
 \boldsymbol{\Omega} = 
@@ -72,7 +72,7 @@ $$
 We used weakly informative priors mostly inspired by @mcelreathStatisticalRethinkingBayesian2020. We used $\mathrm{Normal}(0,1.5)$ priors for the fixed effect intercept $\beta_{0}$, which corresponds to the logit of a proportion, and $\mathrm{Normal}(0,1)$ for the fixed effect slope $\beta_{1}$. We used $\mathrm{Half-Normal}(0,1)$ priors for all standard deviations $\sigma$, and a $\mathrm{LKJ}(2)$ prior for the correlation matrix $\boldsymbol{R}$.
 
 
-Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code<!--ref?-->). We therefore fitted the equivalent beta-binomial models to account for that overdispersion [@harrisonComparisonObservationlevelRandom2015]:
+Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code<!--ref?-->). We therefore fitted beta-binomial models to account for that overdispersion [@harrisonComparisonObservationlevelRandom2015]:
 
 $$
 B_{i,j} \sim \mathrm{BetaBinomial}(N_{i,j}, p_{i,j}, \phi),
@@ -91,7 +91,7 @@ $$
 $$
 b_{i,j} = (1 - p_{i,j}) \times \phi,
 $$
-where $\phi$ is a precision parameter (higher values = lower overdispersion) in the `brms` implementation. We set priors on the inverse of $\phi$ (where higher values = higher overdispersion): $1/\phi \sim \mathrm{Half-Normal}(0,1)$ (based on similar suggestions for negative binomial models; seee e.g. https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#story-when-the-generic-prior-fails-the-case-of-the-negative-binomial). The model formulation for $p_{i,j}$ is then the same as in the binomial case. 
+where $\phi$ is a precision parameter (higher values = lower overdispersion) in the `brms`  [@burknerBrmsPackageBayesian2017] implementation. We set priors on the inverse of $\phi$ (where higher values = higher overdispersion): $1/\phi \sim \mathrm{Half-Normal}(0,1)$ (based on similar suggestions for negative binomial models; seee e.g. https://github.com/stan-dev/stan/wiki/Prior-Choice-Recommendations#story-when-the-generic-prior-fails-the-case-of-the-negative-binomial). The model formulation for $p_{i,j}$ is then the same as in the binomial case. 
 
 ```{r data}
 raw_counts <- read_csv(here("data", "raw_data", "pterostichus_madidus_2004_2005.csv"))
