@@ -72,7 +72,7 @@ $$
 We used weakly informative priors mostly inspired by @mcelreathStatisticalRethinkingBayesian2020. We used $\mathrm{Normal}(0,1.5)$ priors for the fixed effect intercept $\beta_{0}$, which corresponds to the logit of a proportion, and $\mathrm{Normal}(0,1)$ for the fixed effect slope $\beta_{1}$. We used $\mathrm{Half-Normal}(0,1)$ priors for all standard deviations $\sigma$, and a $\mathrm{LKJ}(2)$ prior for the correlation matrix $\boldsymbol{R}$.
 
 
-Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code<!--ref?-->). We therefore fitted beta-binomial models to account for that overdispersion [@harrisonComparisonObservationlevelRandom2015]:
+Evaluations of these models revealed slight but consistent evidence of overdispersion (see archived data analysis code: https://github.com/mdahirel/pterostichus-morphology-2004 or https://doi.org/10.5281/zenodo.7737152). We therefore fitted beta-binomial models to account for that overdispersion [@harrisonComparisonObservationlevelRandom2015]:
 
 $$
 B_{i,j} \sim \mathrm{BetaBinomial}(N_{i,j}, p_{i,j}, \phi),
