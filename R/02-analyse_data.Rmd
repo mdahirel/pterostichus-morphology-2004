@@ -162,7 +162,8 @@ if (file.exists(here("R_output", "model_distanceB.RDS")))
     family = binomial,
     data = data,
     backend = "cmdstanr",
-    seed = 42, prior = priorB
+    seed = 42, iter = 2000, 
+    prior = priorB
   )
 
   saveRDS(mod_distB, file = here("R_output", "model_distanceB.RDS"))
@@ -220,7 +221,7 @@ if (file.exists(here("R_output", "model_distanceBetaB.RDS"))) {
     family = beta_binomial(link_phi = "identity"),
     data = data,
     backend = "cmdstanr",
-    seed = 42,
+    seed = 42, iter = 2000, 
     prior = priorBB
   )
 
@@ -272,7 +273,7 @@ for (i in 1:length(buffer_widths)) {
       family = binomial,
       data = data,
       backend = "cmdstanr",
-      seed = 42,
+      seed = 42, iter = 2000, 
       prior = priorB,
       control = list(adapt_delta = 0.9)
     )
@@ -309,7 +310,7 @@ for (i in 1:length(buffer_widths)) {
       family = beta_binomial(link_phi = "identity"),
       data = data,
       backend = "cmdstanr",
-      seed = 42,
+      seed = 42, iter = 2000, 
       prior = priorBB,
       control = list(adapt_delta = 0.9)
     )

@@ -529,7 +529,7 @@ if (file.exists(here("R_output", "model_distanceN.RDS"))) {
     family = negbinomial(link_shape = "identity"),
     data = dataNB,
     backend = "cmdstanr",
-    seed = 42,
+    seed = 42, iter = 2000, 
     prior = priorNB,
     control = list(adapt_delta = 0.9)
   )
@@ -560,7 +560,7 @@ for (i in 1:length(buffer_widths)) {
       family = negbinomial(link_shape = "identity"),
       data = dataNB,
       backend = "cmdstanr",
-      seed = 42,
+      seed = 42, iter = 2000, 
       prior = priorNB,
       control = list(adapt_delta = 0.9)
     )
