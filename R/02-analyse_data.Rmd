@@ -57,7 +57,7 @@ The `raw_counts` table is structured as follows:
 
 - a `CAMP` column (for "campaign") describing the sampling session
 
-- a `SITE` column with the short ID for each woodland
+- a `SITE` column with the short ID for each woodland. Sites `PB` and `PG` are the sites not part of the initial protocol in Croci et al (2008) (see manuscript). They were set up using the same methodology, but were not part of the taxonomically broader project Croci et al (2008) was a part of. They were also sampled in 2004 only.
 
 The `dates` table contains information about the `YEAR` (2004 or 2005), start (`DATE_start`) and end date (`DATE_end`) of each sampling session (`CAMP`).
 
