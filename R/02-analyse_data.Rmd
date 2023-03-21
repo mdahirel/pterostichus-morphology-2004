@@ -383,7 +383,7 @@ loo_compare(KCV_1800B, KCV_1800BB)
 
 # Results
 
-For these results we're going to focus on the beta-binomial** model with IMD (100 m)** as the urbanisation metric.
+For these results we're going to focus on the beta-binomial* model with IMD (100 m)** as the urbanisation metric.
 * see above why
 ** see the Supplementary Material to find why
 It is easy to change that in the code below to see that all key conclusions are unaffected by model choice (within our set).
